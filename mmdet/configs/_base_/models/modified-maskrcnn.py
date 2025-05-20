@@ -41,7 +41,7 @@ model = dict(
                 sampling_ratio=2
             ),
             out_channels=160,
-            featmap_strides=[4, 8, 16, 32]
+            featmap_strides=[4, 8, 16, 32, 64]
         ),
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -58,7 +58,7 @@ model = dict(
                 sampling_ratio=2
             ),
             out_channels=160,
-            featmap_strides=[4, 8, 16, 32]
+            featmap_strides=[4, 8, 16, 32, 64]
         ),
         mask_head=dict(
             type='FCNMaskHead',
