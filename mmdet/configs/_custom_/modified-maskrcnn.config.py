@@ -1,24 +1,28 @@
 # configs/_custom_/mask_rcnn_reppoints_effb3.py
 
-_base_ = 'mmdet::mask_rcnn/mask-rcnn_r50-caffe_fpn_ms-1x_coco.py'
+_base_ = 'mmdet::mask_rcnn/mask-rcnn_r101-caffe_fpn_ms-1x_coco.py'
 
 model = dict(
     type='MaskRCNN',
     backbone=dict(
         type='EfficientNetD3Backbone',
         pretrained=True
+        out_indices=(1, 2, 3, 4),
+        init_cfg=dict(type='Pretrained', checkpoint='...'),
     ),
     neck=dict(
-        type='BiFPN',
-        in_channels=[48, 136, 384],
-        out_channels=160,
-        num_outs=5
+        type='BIFPN',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=256,
+        num_outs=5,
+        stack=2,
+        activation=dict(type='Swish'),
     ),
     rpn_head=dict(
         type='RepPointsHead',
         num_classes=80,
-        in_channels=160,
-        feat_channels=160,
+        in_channels=256,
+        feat_channels=256,
         point_feat_channels=160,
         stacked_convs=3,
         num_points=9,
@@ -44,12 +48,12 @@ model = dict(
                 output_size=7,
                 sampling_ratio=2
             ),
-            out_channels=160,
+            out_channels=256,
             featmap_strides=[4, 8, 16, 32]
         ),
         bbox_head=dict(
             type='Shared2FCBBoxHead',
-            in_channels=160,
+            in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=80
@@ -61,13 +65,13 @@ model = dict(
                 output_size=14,
                 sampling_ratio=2
             ),
-            out_channels=160,
+            out_channels=256,
             featmap_strides=[4, 8, 16, 32]
         ),
         mask_head=dict(
             type='FCNMaskHead',
             num_convs=4,
-            in_channels=160,
+            in_channels=256,
             conv_out_channels=256,
             num_classes=80
         )
