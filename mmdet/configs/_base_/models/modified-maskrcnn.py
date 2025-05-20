@@ -36,7 +36,7 @@ model = dict(
         bbox_roi_extractor=dict(
             type='SingleRoIExtractor',
             roi_layer=dict(
-                type='MultiScaleRoIAlign',  # <- updated
+                type='RoIAlign',  # <- updated
                 output_size=7,
                 sampling_ratio=2
             ),
@@ -53,7 +53,7 @@ model = dict(
         mask_roi_extractor=dict(
             type='SingleRoIExtractor',
             roi_layer=dict(
-                type='MultiScaleRoIAlign',  # <- updated
+                type='RoIAlign',  # <- updated
                 output_size=14,
                 sampling_ratio=2
             ),
