@@ -1,6 +1,6 @@
 # configs/_custom_/mask_rcnn_reppoints_effb3.py
 
-_base_ = 'mmdet::mask_rcnn/mask-rcnn_r101-caffe_fpn_ms-1x_coco.py'
+_base_ = 'mmdet::mask_rcnn/mask-rcnn_r50-caffe_fpn_ms-1x_coco.py'
 
 model = dict(
     type='MaskRCNN',
