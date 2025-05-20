@@ -8,7 +8,7 @@ model = dict(
         type='EfficientNetD3Backbone',
         pretrained=True,
         out_indices=(1, 2, 3),
-        init_cfg=dict(type='Pretrained', checkpoint='...'),
+        init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
     ),
     neck=dict(
         type='BIFPN',
@@ -20,7 +20,7 @@ model = dict(
     ),
     rpn_head=dict(
         type='RepPointsHead',
-        num_classes=80,
+        num_classes=17,
         in_channels=256,
         feat_channels=256,
         point_feat_channels=256,
@@ -56,7 +56,7 @@ model = dict(
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=80
+            num_classes=17
         ),
         mask_roi_extractor=dict(
             type='SingleRoIExtractor',
@@ -73,7 +73,7 @@ model = dict(
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
-            num_classes=80
+            num_classes=17
         )
     )
 )
