@@ -7,15 +7,15 @@ model = dict(
     neck=dict(
         type='BiFPN',
         in_channels=[48, 136, 384],
-        out_channels=160,
+        out_channels=256,
         num_outs=5
     ),
     rpn_head=dict(
         type='RepPointsHead',
-        num_classes=80,
-        in_channels=160,
-        feat_channels=160,
-        point_feat_channels=160,
+        num_classes=17,
+        in_channels=256,
+        feat_channels=256,
+        point_feat_channels=256,
         stacked_convs=3,
         num_points=9,
         gradient_mul=0.3,
@@ -45,10 +45,10 @@ model = dict(
         ),
         bbox_head=dict(
             type='Shared2FCBBoxHead',
-            in_channels=160,
+            in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=80
+            num_classes=17
         ),
         mask_roi_extractor=dict(
             type='SingleRoIExtractor',
@@ -57,15 +57,15 @@ model = dict(
                 output_size=14,
                 sampling_ratio=2
             ),
-            out_channels=160,
+            out_channels=256,
             featmap_strides=[4, 8, 16, 32, 64]
         ),
         mask_head=dict(
             type='FCNMaskHead',
             num_convs=4,
-            in_channels=160,
+            in_channels=256,
             conv_out_channels=256,
-            num_classes=80
+            num_classes=17
         )
     )
 )
