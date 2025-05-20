@@ -6,13 +6,13 @@ model = dict(
     type='MaskRCNN',
     backbone=dict(
         type='EfficientNetD3Backbone',
-        pretrained=True
-        out_indices=(1, 2, 3, 4),
+        pretrained=True,
+        out_indices=(1, 2, 3),
         init_cfg=dict(type='Pretrained', checkpoint='...'),
     ),
     neck=dict(
         type='BIFPN',
-        in_channels=[256, 512, 1024, 2048],
+        in_channels=[48, 136, 384],
         out_channels=256,
         num_outs=5,
         stack=2,
@@ -23,7 +23,7 @@ model = dict(
         num_classes=80,
         in_channels=256,
         feat_channels=256,
-        point_feat_channels=160,
+        point_feat_channels=256,
         stacked_convs=3,
         num_points=9,
         gradient_mul=0.3,
