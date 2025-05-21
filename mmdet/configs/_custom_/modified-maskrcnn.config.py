@@ -7,10 +7,11 @@ test_cfg = dict(type='TestLoop')
 model = dict(
     type='mmdet.MaskRCNN',
     backbone=dict(
-        type='EfficientNetD3Backbone',
+        type='EfficientNet',
+        arch='b3',
         pretrained=True,
         out_indices=(1, 2, 3),
-       init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
+        init_cfg=dict(type='Pretrained', checkpoint=''),
     ),
     neck=dict(
         type='BIFPN',
