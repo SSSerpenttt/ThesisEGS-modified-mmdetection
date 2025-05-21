@@ -1,5 +1,5 @@
-from .rpn_heads import reppoints_rpn_head
+from .rpn_heads import RepPointsRPNHead
 
 __all__ = [
-    'reppoints_rpn_head'
+    'RepPointsRPNHead'
 ]
