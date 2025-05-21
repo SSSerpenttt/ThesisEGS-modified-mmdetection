@@ -1,16 +1,13 @@
 import torch.nn as nn
 import torch.nn.functional as F
-
-from mmdet.core import auto_fp16
-from ..registry import NECKS
-# from .module import ConvModule, xavier_init
-from mmcv.cnn import xavier_init
-
-from mmdet.ops import ConvModule
-
 import torch
 
-@NECKS.register_module
+from mmcv.utils import auto_fp16
+from mmdet.registry import MODELS
+from mmcv.cnn import xavier_init
+from mmcv.cnn import ConvModule
+
+@MODELS.register_module()
 class BIFPN(nn.Module):
     def __init__(self,
                  in_channels,
