@@ -2,7 +2,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
-from mmcv.utils import auto_fp16
 from mmdet.registry import MODELS
 from mmcv.cnn import xavier_init
 from mmcv.cnn import ConvModule
@@ -95,7 +94,6 @@ class BIFPN(nn.Module):
             if isinstance(m, nn.Conv2d):
                 xavier_init(m, distribution='uniform')
 
-    @auto_fp16()
     def forward(self, inputs):
         assert len(inputs) == len(self.in_channels)
 
