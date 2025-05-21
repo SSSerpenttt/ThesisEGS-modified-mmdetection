@@ -1,7 +1,10 @@
+# FP16 mixed precision
+fp16 = dict(loss_scale='dynamic')
+
 model = dict(
     type='MaskRCNN',
     backbone=dict(
-        type='EfficientNetD3Backbone',
+        type='EfficientNet',
         pretrained=True
     ),
     neck=dict(
