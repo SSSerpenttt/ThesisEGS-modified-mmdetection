@@ -5,17 +5,21 @@ model = dict(
     type='MaskRCNN',
     backbone=dict(
         type='EfficientNet',
-        pretrained=True
+        arch='b3',
+        pretrained=True,
+        out_indices=(1, 2, 3),
+        init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
     ),
     neck=dict(
         type='BiFPN',
         in_channels=[48, 136, 384],
         out_channels=256,
-        num_outs=5
+        num_outs=5,
+        stack=2
     ),
     rpn_head=dict(
-        type='RepPointsHead',
-        num_classes=17,
+        type='RepPointsRPNHead',
+        num_classes=1,
         in_channels=256,
         feat_channels=256,
         point_feat_channels=256,
@@ -24,7 +28,7 @@ model = dict(
         gradient_mul=0.3,
         point_strides=[8, 16, 32, 64, 128],
         point_base_scale=4,
-        transform_method='minmax',  # <--- your function uses this
+        transform_method='minmax',
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -39,11 +43,11 @@ model = dict(
         bbox_roi_extractor=dict(
             type='SingleRoIExtractor',
             roi_layer=dict(
-                type='RoIAlign',  # <- updated
+                type='RoIAlign',
                 output_size=7,
                 sampling_ratio=2
             ),
-            out_channels=160,
+            out_channels=256,
             featmap_strides=[4, 8, 16, 32, 64]
         ),
         bbox_head=dict(
@@ -56,7 +60,7 @@ model = dict(
         mask_roi_extractor=dict(
             type='SingleRoIExtractor',
             roi_layer=dict(
-                type='RoIAlign',  # <- updated
+                type='RoIAlign',
                 output_size=14,
                 sampling_ratio=2
             ),
