@@ -1,28 +1,57 @@
-%%writefile /content/ThesisEGS-modified-mmdetection/mmdet/configs/_custom_/modified-maskrcnn.config.py
-# Training schedule
+# Top-level training loop config (must be named train_cfg for MMEngine)
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=12, val_interval=1)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
+# Model internal train_cfg and test_cfg (for heads, etc)
+model_train_cfg = dict(
+    rpn=dict(
+        assigner=dict(type='MaxIoUAssigner', pos_iou_thr=0.7, neg_iou_thr=0.3, min_pos_iou=0.3, match_low_quality=True, ignore_iof_thr=-1),
+        sampler=dict(type='RandomSampler', num=256, pos_fraction=0.5, neg_pos_ub=-1, add_gt_as_proposals=False),
+        allowed_border=0,
+        pos_weight=-1,
+        debug=False
+    ),
+    rcnn=dict(
+        assigner=dict(type='MaxIoUAssigner', pos_iou_thr=0.5, neg_iou_thr=0.5, min_pos_iou=0.5, match_low_quality=False, ignore_iof_thr=-1),
+        sampler=dict(type='RandomSampler', num=512, pos_fraction=0.25, neg_pos_ub=-1, add_gt_as_proposals=True),
+        pos_weight=-1,
+        debug=False
+    )
+)
+
+model_test_cfg = dict(
+    rpn=dict(
+        nms_pre=1000,
+        max_per_img=1000,
+        nms=dict(type='nms', iou_threshold=0.7),
+        min_bbox_size=0
+    ),
+    rcnn=dict(
+        score_thr=0.05,
+        nms=dict(type='nms', iou_threshold=0.5),
+        max_per_img=100
+    )
+)
+
 model = dict(
     type='mmdet.MaskRCNN',
     backbone=dict(
-        type='EfficientNet',
+        type='mmdet.EfficientNet',
         arch='b3',
-        pretrained=True,
         out_indices=(1, 2, 3),
-        init_cfg=dict(type='Pretrained', checkpoint=''),
+        init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
     ),
     neck=dict(
-        type='BIFPN',
+        type='mmdet.BIFPN',
         in_channels=[48, 136, 384],
         out_channels=256,
         num_outs=5,
-        stack=2,
-        activation=dict(type='Swish'),
+        stack=2
+        # activation=dict(type='Swish'),
     ),
     rpn_head = dict(
-        type='mmdet.RepPointsRPNHead',
+        type='RepPointsRPNHead',
         in_channels=256,
         feat_channels=256,
         point_feat_channels=256,
@@ -38,15 +67,15 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0),
-        loss_bbox_init=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=0.5),
-        loss_bbox_refine=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=1.0)
+        loss_bbox_init=dict(type='SmoothL1Loss', beta=1.0, loss_weight=0.5),
+        loss_bbox_refine=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)
     ),
     roi_head=dict(
-        type='StandardRoIHead',
+        type='mmdet.StandardRoIHead',
         bbox_roi_extractor=dict(
-            type='SingleRoIExtractor',
+            type='mmdet.SingleRoIExtractor',
             roi_layer=dict(
-                type='RoIAlign',
+                type='mmdet.RoIAlign',
                 output_size=7,
                 sampling_ratio=2
             ),
@@ -54,16 +83,16 @@ model = dict(
             featmap_strides=[4, 8, 16, 32, 64]
         ),
         bbox_head=dict(
-            type='Shared2FCBBoxHead',
+            type='mmdet.Shared2FCBBoxHead',
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=17
         ),
         mask_roi_extractor=dict(
-            type='SingleRoIExtractor',
+            type='mmdet.SingleRoIExtractor',
             roi_layer=dict(
-                type='RoIAlign',
+                type='mmdet.RoIAlign',
                 output_size=14,
                 sampling_ratio=2
             ),
@@ -71,15 +100,15 @@ model = dict(
             featmap_strides=[4, 8, 16, 32, 64]
         ),
         mask_head=dict(
-            type='FCNMaskHead',
+            type='mmdet.FCNMaskHead',
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
             num_classes=17
         )
     ),
-    train_cfg=train_cfg,  # <---- add this
-    test_cfg=test_cfg     # <---- add this
+    train_cfg=model_train_cfg,
+    test_cfg=model_test_cfg
 )
 
 # Dataset root
