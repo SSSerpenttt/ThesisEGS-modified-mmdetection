@@ -1,9 +1,9 @@
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.init as init
 import torch
 
 from mmdet.registry import MODELS
-from mmcv.cnn import xavier_init
 from mmcv.cnn import ConvModule
 
 @MODELS.register_module()
@@ -90,9 +90,11 @@ class BIFPN(nn.Module):
 
     # default init_weights for conv(msra) and norm in ConvModule
     def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                xavier_init(m, distribution='uniform')
+     for m in self.modules():
+        if isinstance(m, nn.Conv2d):
+            init.xavier_uniform_(m.weight)  # Use PyTorch's xavier uniform initialization
+            if m.bias is not None:
+                init.constant_(m.bias, 0)  # Initialize bias to zero if exists
 
     def forward(self, inputs):
         assert len(inputs) == len(self.in_channels)
@@ -166,9 +168,11 @@ class BiFPNModule(nn.Module):
 
     # default init_weights for conv(msra) and norm in ConvModule
     def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                xavier_init(m, distribution='uniform')
+     for m in self.modules():
+        if isinstance(m, nn.Conv2d):
+            init.xavier_uniform_(m.weight)  # Use PyTorch's xavier uniform initialization
+            if m.bias is not None:
+                init.constant_(m.bias, 0)  # Initialize bias to zero if exists
 
     def forward(self, inputs):
         assert len(inputs) == self.levels
