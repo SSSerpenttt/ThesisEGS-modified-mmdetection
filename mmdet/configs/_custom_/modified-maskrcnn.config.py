@@ -21,9 +21,8 @@ model = dict(
         stack=2,
         activation=dict(type='Swish'),
     ),
-    rpn_head=dict(
-        type='RepPointsHead',
-        num_classes=17,
+    rpn_head = dict(
+        type='mmdet.RepPointsRPNHead',
         in_channels=256,
         feat_channels=256,
         point_feat_channels=256,
@@ -39,8 +38,8 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0),
-        loss_bbox_init=dict(type='SmoothL1Loss', beta=1.0, loss_weight=0.5),
-        loss_bbox_refine=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)
+        loss_bbox_init=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=0.5),
+        loss_bbox_refine=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=1.0)
     ),
     roi_head=dict(
         type='StandardRoIHead',
