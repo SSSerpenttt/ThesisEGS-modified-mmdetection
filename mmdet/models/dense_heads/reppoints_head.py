@@ -440,6 +440,15 @@ class RepPointsHead(AnchorFreeHead):
         else:
             assigner = self.refine_assigner
             pos_weight = self.train_cfg['refine']['pos_weight']
+        
+        gt_bboxes = gt_instances.bboxes
+        gt_labels = gt_instances.labels
+
+        if gt_bboxes.numel() == 0 or gt_bboxes.shape[0] == 0:
+            print("[DEBUG] GT bboxes are empty or invalid!")
+            print(f"[DEBUG] Got gt_bboxes: {gt_bboxes}")
+            print(f"[DEBUG] pred_instances: {pred_instances}")
+            import traceback; traceback.print_stack()
 
         assign_result = assigner.assign(pred_instances, gt_instances,
                                         gt_instances_ignore)
@@ -459,7 +468,7 @@ class RepPointsHead(AnchorFreeHead):
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
         if len(pos_inds) > 0:
-            bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes
+            bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes.tensor
             pos_proposals[pos_inds, :] = proposals[pos_inds, :]
             proposals_weights[pos_inds, :] = 1.0
 
@@ -820,7 +829,10 @@ class RepPointsHead(AnchorFreeHead):
         for level_idx, (cls_score, bbox_pred, priors) in enumerate(
                 zip(cls_score_list, bbox_pred_list, mlvl_priors)):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
-            bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
+            
+            print('bbox_pred.shape before permute:', bbox_pred.shape)
+            C, H, W = bbox_pred.shape
+            bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, C)
 
             cls_score = cls_score.permute(1, 2,
                                           0).reshape(-1, self.cls_out_channels)

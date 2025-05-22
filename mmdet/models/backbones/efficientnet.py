@@ -394,13 +394,19 @@ class EfficientNet(BaseModule):
             self.layers.append(Sequential(*layer))
 
     def forward(self, x):
-        outs = []
-        for i, layer in enumerate(self.layers):
-            x = layer(x)
-            if i in self.out_indices:
-                outs.append(x)
+      # Ensure x is a 4D tensor: (N, C, H, W)
+      if isinstance(x, list):
+          x = x[0]  # Handle case where input is a list of tensors
+      if x.dim() == 3:
+          x = x.unsqueeze(0)  # Convert (C, H, W) to (1, C, H, W)
 
-        return tuple(outs)
+      outs = []
+      for i, layer in enumerate(self.layers):
+          x = layer(x)
+          if i in self.out_indices:
+              outs.append(x)
+
+      return tuple(outs)
 
     def _freeze_stages(self):
         for i in range(self.frozen_stages):

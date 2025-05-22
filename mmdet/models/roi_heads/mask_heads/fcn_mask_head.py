@@ -13,6 +13,7 @@ from mmengine.structures import InstanceData
 from torch import Tensor
 from torch.nn.modules.utils import _pair
 
+from mmdet.models.losses import CrossEntropyLoss
 from mmdet.models.task_modules.samplers import SamplingResult
 from mmdet.models.utils import empty_instances
 from mmdet.registry import MODELS
@@ -42,7 +43,7 @@ class FCNMaskHead(BaseModule):
                  norm_cfg: OptConfigType = None,
                  predictor_cfg: ConfigType = dict(type='Conv'),
                  loss_mask: ConfigType = dict(
-                     type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
+                     type='mmdet.CrossEntropyLoss', use_mask=True, loss_weight=1.0),
                  init_cfg: OptMultiConfig = None) -> None:
         assert init_cfg is None, 'To prevent abnormal initialization ' \
                                  'behavior, init_cfg is not allowed to be set'

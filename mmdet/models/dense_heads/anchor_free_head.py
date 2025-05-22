@@ -8,6 +8,7 @@ from numpy import ndarray
 from torch import Tensor
 
 from mmdet.registry import MODELS, TASK_UTILS
+from mmdet.models.task_modules.coders import DistancePointBBoxCoder
 from mmdet.utils import (ConfigType, InstanceList, MultiConfig, OptConfigType,
                          OptInstanceList)
 from ..task_modules.prior_generators import MlvlPointGenerator
@@ -68,7 +69,7 @@ class AnchorFreeHead(BaseDenseHead):
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox: ConfigType = dict(type='IoULoss', loss_weight=1.0),
-        bbox_coder: ConfigType = dict(type='DistancePointBBoxCoder'),
+        bbox_coder: ConfigType = dict(type='mmdet.DistancePointBBoxCoder'),
         conv_cfg: OptConfigType = None,
         norm_cfg: OptConfigType = None,
         train_cfg: OptConfigType = None,

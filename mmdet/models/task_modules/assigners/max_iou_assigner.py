@@ -128,7 +128,7 @@ class MaxIoUAssigner(BaseAssigner):
                  ignore_wrt_candidates: bool = True,
                  match_low_quality: bool = True,
                  gpu_assign_thr: float = -1,
-                 iou_calculator: dict = dict(type='BboxOverlaps2D'),
+                 iou_calculator: dict = dict(type='mmdet.BboxOverlaps2D'),
                  perm_repeat_gt_cfg=None):
         self.pos_iou_thr = pos_iou_thr
         self.neg_iou_thr = neg_iou_thr

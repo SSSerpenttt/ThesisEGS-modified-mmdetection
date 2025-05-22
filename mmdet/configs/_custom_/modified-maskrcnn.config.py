@@ -6,15 +6,15 @@ test_cfg = dict(type='TestLoop')
 # Model internal train_cfg and test_cfg (for heads, etc)
 model_train_cfg = dict(
     rpn=dict(
-        assigner=dict(type='MaxIoUAssigner', pos_iou_thr=0.7, neg_iou_thr=0.3, min_pos_iou=0.3, match_low_quality=True, ignore_iof_thr=-1),
-        sampler=dict(type='RandomSampler', num=256, pos_fraction=0.5, neg_pos_ub=-1, add_gt_as_proposals=False),
+        assigner=dict(type='mmdet.MaxIoUAssigner', pos_iou_thr=0.7, neg_iou_thr=0.3, min_pos_iou=0.3, match_low_quality=True, ignore_iof_thr=-1),
+        sampler=dict(type='mmdet.RandomSampler', num=256, pos_fraction=0.5, neg_pos_ub=-1, add_gt_as_proposals=False),
         allowed_border=0,
         pos_weight=-1,
         debug=False
     ),
     rcnn=dict(
-        assigner=dict(type='MaxIoUAssigner', pos_iou_thr=0.5, neg_iou_thr=0.5, min_pos_iou=0.5, match_low_quality=False, ignore_iof_thr=-1),
-        sampler=dict(type='RandomSampler', num=512, pos_fraction=0.25, neg_pos_ub=-1, add_gt_as_proposals=True),
+        assigner=dict(type='mmdet.MaxIoUAssigner', pos_iou_thr=0.5, neg_iou_thr=0.5, min_pos_iou=0.5, match_low_quality=False, ignore_iof_thr=-1),
+        sampler=dict(type='mmdet.RandomSampler', num=512, pos_fraction=0.25, neg_pos_ub=-1, add_gt_as_proposals=True),
         pos_weight=-1,
         debug=False
     )
@@ -22,14 +22,15 @@ model_train_cfg = dict(
 
 model_test_cfg = dict(
     rpn=dict(
+        score_thr=0.05,
         nms_pre=1000,
         max_per_img=1000,
-        nms=dict(type='nms', iou_threshold=0.7),
+        nms=dict(type='mmdet.nms', iou_threshold=0.7),
         min_bbox_size=0
     ),
     rcnn=dict(
         score_thr=0.05,
-        nms=dict(type='nms', iou_threshold=0.5),
+        nms=dict(type='mmdet.nms', iou_threshold=0.5),
         max_per_img=100
     )
 )
@@ -39,8 +40,8 @@ model = dict(
     backbone=dict(
         type='mmdet.EfficientNet',
         arch='b3',
-        out_indices=(1, 2, 3),
-        init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
+        out_indices=(3, 4, 5)
+        # init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://efficientnet_b3'),
     ),
     neck=dict(
         type='mmdet.BIFPN',
@@ -50,32 +51,57 @@ model = dict(
         stack=2
         # activation=dict(type='Swish'),
     ),
-    rpn_head = dict(
-        type='RepPointsRPNHead',
-        in_channels=256,
-        feat_channels=256,
-        point_feat_channels=256,
-        stacked_convs=3,
-        num_points=9,
-        gradient_mul=0.3,
-        point_strides=[8, 16, 32, 64, 128],
-        point_base_scale=4,
-        transform_method='minmax',
-        loss_cls=dict(
-            type='FocalLoss',
-            use_sigmoid=True,
-            gamma=2.0,
-            alpha=0.25,
-            loss_weight=1.0),
-        loss_bbox_init=dict(type='SmoothL1Loss', beta=1.0, loss_weight=0.5),
-        loss_bbox_refine=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)
+    rpn_head=dict(
+      type='mmdet.RepPointsRPNHead',
+      in_channels=256,
+      feat_channels=256,
+      point_feat_channels=256,
+      stacked_convs=3,
+      num_points=9,
+      gradient_mul=0.3,
+      point_strides=[8, 16, 32, 64, 128],
+      point_base_scale=4,
+      transform_method='minmax',
+      loss_cls=dict(
+          type='mmdet.FocalLoss',
+          use_sigmoid=True,
+          gamma=2.0,
+          alpha=0.25,
+          loss_weight=1.0
+      ),
+      loss_bbox_init=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=0.5),
+      loss_bbox_refine=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=1.0),
+      loss_bbox=dict(type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=1.0),
+      train_cfg=dict(
+          init=dict(
+              assigner=dict(
+                  type='mmdet.PointAssigner',
+                  scale=4,
+                  pos_num=1
+              ),
+              allowed_border=0,
+              pos_weight=-1
+          ),
+          refine=dict(
+              assigner=dict(
+                  type='mmdet.MaxIoUAssigner',
+                  pos_iou_thr=0.5,
+                  neg_iou_thr=0.5,
+                  min_pos_iou=0,
+                  ignore_iof_thr=-1,
+                  iou_calculator=dict(type='mmdet.BboxOverlaps2D')
+              ),
+              allowed_border=0,
+              pos_weight=-1
+          )
+      )
     ),
     roi_head=dict(
         type='mmdet.StandardRoIHead',
         bbox_roi_extractor=dict(
             type='mmdet.SingleRoIExtractor',
             roi_layer=dict(
-                type='mmdet.RoIAlign',
+                type='RoIAlign',
                 output_size=7,
                 sampling_ratio=2
             ),
@@ -92,7 +118,7 @@ model = dict(
         mask_roi_extractor=dict(
             type='mmdet.SingleRoIExtractor',
             roi_layer=dict(
-                type='mmdet.RoIAlign',
+                type='RoIAlign',
                 output_size=14,
                 sampling_ratio=2
             ),
@@ -135,19 +161,37 @@ metainfo = {
     ]
 }
 
+# Common image normalization config
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53],  # Standard ImageNet means
+    std=[58.395, 57.12, 57.375],
+    to_rgb=True
+)
+
 # Dataloaders
 train_dataloader = dict(
-    batch_size=4,
+    batch_size=1,
     num_workers=2,
     persistent_workers=True,
     pin_memory=True,
-    sampler=dict(type='DefaultSampler', shuffle=True),
+    sampler=dict(type='mmdet.DefaultSampler', shuffle=True),
     dataset=dict(
-        type='CocoDataset',
+        type='mmdet.CocoDataset',
         metainfo=metainfo,
         ann_file=data_root + 'train/_annotations.coco.json',
         data_prefix=dict(img=data_root + 'train/'),
         filter_cfg=dict(filter_empty_gt=True),
+        pipeline=[
+            dict(type='mmdet.LoadImageFromFile'),
+            dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
+            dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(1, 1), keep_empty=False),  # Add this line
+            dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
+            dict(type='mmdet.RandomFlip', prob=0.5),
+            dict(type='mmdet.Normalize', **img_norm_cfg),
+            dict(type='mmdet.Pad', size_divisor=32, pad_val=0),
+            dict(type='mmdet.PackDetInputs', meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape',
+                   'scale_factor', 'flip', 'flip_direction', 'img_norm_cfg')),
+        ],
     )
 )
 
@@ -156,12 +200,23 @@ val_dataloader = dict(
     num_workers=2,
     persistent_workers=True,
     pin_memory=True,
-    sampler=dict(type='DefaultSampler', shuffle=False),
+    sampler=dict(type='mmdet.DefaultSampler', shuffle=False),
     dataset=dict(
-        type='CocoDataset',
+        type='mmdet.CocoDataset',
         metainfo=metainfo,
         ann_file=data_root + 'valid/_annotations.coco.json',
-        data_prefix=dict(img=data_root + 'valid/')
+        data_prefix=dict(img=data_root + 'valid/'),
+        filter_cfg=dict(filter_empty_gt=True),  # ADD THIS
+        pipeline=[
+            dict(type='mmdet.LoadImageFromFile'),
+            dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
+            dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(1, 1)),  # Add this line
+            dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
+            dict(type='mmdet.Normalize', **img_norm_cfg),
+            dict(type='mmdet.Pad', size_divisor=32, pad_val=0),
+            dict(type='mmdet.PackDetInputs', meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape',
+                   'scale_factor', 'flip', 'flip_direction', 'img_norm_cfg')),
+        ],
     )
 )
 
@@ -170,46 +225,57 @@ test_dataloader = dict(
     num_workers=2,
     persistent_workers=True,
     pin_memory=True,
-    sampler=dict(type='DefaultSampler', shuffle=False),
+    sampler=dict(type='mmdet.DefaultSampler', shuffle=False),
     dataset=dict(
-        type='CocoDataset',
+        type='mmdet.CocoDataset',
         metainfo=metainfo,
         ann_file=data_root + 'test/_annotations.coco.json',
-        data_prefix=dict(img=data_root + 'test/')
+        data_prefix=dict(img=data_root + 'test/'),
+        filter_cfg=dict(filter_empty_gt=True),  # ADD THIS
+        pipeline=[
+            dict(type='mmdet.LoadImageFromFile'),
+            dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
+            dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(1, 1)),  # Add this line
+            dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
+            dict(type='mmdet.Normalize', **img_norm_cfg),
+            dict(type='mmdet.Pad', size_divisor=32, pad_val=0),
+            dict(type='mmdet.PackDetInputs', meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape',
+                   'scale_factor', 'flip', 'flip_direction', 'img_norm_cfg')),
+        ],
     )
 )
 
 # Evaluators
 val_evaluator = dict(
-    type='CocoMetric',
+    type='mmdet.CocoMetric',
     ann_file=data_root + 'valid/_annotations.coco.json',
     metric=['bbox', 'segm']
 )
 
 test_evaluator = dict(
-    type='CocoMetric',
+    type='mmdet.CocoMetric',
     ann_file=data_root + 'test/_annotations.coco.json',
     metric=['bbox', 'segm']
 )
 
 # Optimizer and LR schedule
 optim_wrapper = dict(
-    optimizer=dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
+    optimizer=dict(type='mmdet.SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
 )
 
 param_scheduler = [
-    dict(type='LinearLR', start_factor=0.001, by_epoch=False, begin=0, end=500),
-    dict(type='MultiStepLR', by_epoch=True, milestones=[8, 11], gamma=0.1)
+    dict(type='mmdet.LinearLR', start_factor=0.001, by_epoch=False, begin=0, end=500),
+    dict(type='mmdet.MultiStepLR', by_epoch=True, milestones=[8, 11], gamma=0.1)
 ]
 
 # Runtime settings
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=50),
-    checkpoint=dict(type='CheckpointHook', interval=1),
-    param_scheduler=dict(type='ParamSchedulerHook'),
-    timer=dict(type='IterTimerHook'),
-    sampler_seed=dict(type='DistSamplerSeedHook'),
-    visualization=dict(type='DetVisualizationHook')
+    logger=dict(type='mmdet.LoggerHook', interval=50),
+    checkpoint=dict(type='mmdet.CheckpointHook', interval=1),
+    param_scheduler=dict(type='mmdet.ParamSchedulerHook'),
+    timer=dict(type='mmdet.IterTimerHook'),
+    sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
+    visualization=dict(type='mmdet.DetVisualizationHook')
 )
 
 env_cfg = dict(

@@ -1,11 +1,25 @@
+def multi_apply(func, *args, **kwargs):
+    """Apply function to a list of arguments.
+
+    Args:
+        func (callable): function to be applied.
+        *args (list): multiple list of arguments.
+        **kwargs (dict): keyword arguments.
+
+    Returns:
+        tuple: a tuple of list of results.
+    """
+    pfunc = lambda arg: func(*arg, **kwargs) if isinstance(arg, (tuple, list)) else func(arg, **kwargs)
+    map_results = map(pfunc, zip(*args))
+    return tuple(map(list, zip(*map_results)))
+
 import torch
-from mmengine.model import multi_apply
+
 from mmengine.structures import InstanceData
 from mmdet.registry import MODELS
 from mmdet.structures.bbox import get_box_tensor, scale_boxes, empty_box_as
 from mmcv.ops import batched_nms
 from mmdet.models.dense_heads.reppoints_head import RepPointsHead
-
 
 @MODELS.register_module()
 class RepPointsRPNHead(RepPointsHead):

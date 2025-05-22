@@ -9,7 +9,8 @@ from mmengine.model import BaseModule
 from mmengine.structures import InstanceData
 from torch import Tensor
 from torch.nn.modules.utils import _pair
-
+from mmdet.models.task_modules.coders import DeltaXYWHBBoxCoder
+from mmdet.models.losses import CrossEntropyLoss, SmoothL1Loss
 from mmdet.models.layers import multiclass_nms
 from mmdet.models.losses import accuracy
 from mmdet.models.task_modules.samplers import SamplingResult
@@ -32,21 +33,21 @@ class BBoxHead(BaseModule):
                  in_channels: int = 256,
                  num_classes: int = 80,
                  bbox_coder: ConfigType = dict(
-                     type='DeltaXYWHBBoxCoder',
+                     type='mmdet.DeltaXYWHBBoxCoder',
                      clip_border=True,
                      target_means=[0., 0., 0., 0.],
                      target_stds=[0.1, 0.1, 0.2, 0.2]),
                  predict_box_type: str = 'hbox',
                  reg_class_agnostic: bool = False,
                  reg_decoded_bbox: bool = False,
-                 reg_predictor_cfg: ConfigType = dict(type='Linear'),
-                 cls_predictor_cfg: ConfigType = dict(type='Linear'),
+                 reg_predictor_cfg: ConfigType = dict(type='mmdet.Linear'),
+                 cls_predictor_cfg: ConfigType = dict(type='mmdet.Linear'),
                  loss_cls: ConfigType = dict(
-                     type='CrossEntropyLoss',
+                     type='mmdet.CrossEntropyLoss',
                      use_sigmoid=False,
                      loss_weight=1.0),
                  loss_bbox: ConfigType = dict(
-                     type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
+                     type='mmdet.SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  init_cfg: OptMultiConfig = None) -> None:
         super().__init__(init_cfg=init_cfg)
         assert with_cls or with_reg
