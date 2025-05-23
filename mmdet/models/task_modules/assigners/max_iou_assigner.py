@@ -232,6 +232,13 @@ class MaxIoUAssigner(BaseAssigner):
             overlaps[:, ignore_max_overlaps > self.ignore_iof_thr] = -1
 
         assign_result = self.assign_wrt_overlaps(overlaps, gt_labels)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+        # print(f"[DEBUG assign()] max_overlaps after assign_wrt_overlaps: {assign_result.max_overlaps}")
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         if assign_on_cpu:
             assign_result.gt_inds = assign_result.gt_inds.to(device)
             assign_result.max_overlaps = assign_result.max_overlaps.to(device)
@@ -251,7 +258,16 @@ class MaxIoUAssigner(BaseAssigner):
         Returns:
             :obj:`AssignResult`: The assign result.
         """
+<<<<<<< HEAD
         num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
+=======
+<<<<<<< HEAD
+        num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
+=======
+        num_gts = int(overlaps.size(0))
+        num_bboxes = int(overlaps.size(1))
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
 
         # 1. assign -1 by default
         assigned_gt_inds = overlaps.new_full((num_bboxes, ),
@@ -318,8 +334,27 @@ class MaxIoUAssigner(BaseAssigner):
             assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] -
                                                   1]
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cab23055 (Updated)
         return AssignResult(
             num_gts=num_gts,
             gt_inds=assigned_gt_inds,
             max_overlaps=max_overlaps,
             labels=assigned_labels)
+<<<<<<< HEAD
+=======
+=======
+        # print(f"[DEBUG assign_wrt_overlaps()] max_overlaps: {max_overlaps}")
+        # print(f"[DEBUG assign_wrt_overlaps()] type max_overlaps: {type(max_overlaps)}")
+        # print(f"[DEBUG assign_wrt_overlaps()] assigned_gt_inds: {assigned_gt_inds}")
+        # print(f"[DEBUG assign_wrt_overlaps()] assigned_labels: {assigned_labels}")
+
+        return AssignResult(
+            num_gts,
+            assigned_gt_inds,
+            max_overlaps,
+            assigned_labels)
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)

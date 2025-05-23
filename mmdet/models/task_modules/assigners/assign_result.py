@@ -38,6 +38,10 @@ class AssignResult(util_mixins.NiceRepr):
                       labels.shape=(7,))>
     """
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cab23055 (Updated)
     def __init__(self, num_gts: int, gt_inds: Tensor, max_overlaps: Tensor,
                  labels: Tensor) -> None:
         self.num_gts = num_gts
@@ -47,6 +51,21 @@ class AssignResult(util_mixins.NiceRepr):
         # Interface for possible user-defined properties
         self._extra_properties = {}
 
+<<<<<<< HEAD
+=======
+=======
+    def __init__(self, num_gts: int, gt_inds: Tensor, max_overlaps: Tensor = None,
+             labels: Tensor = None) -> None:
+        self.num_gts = num_gts
+        self.gt_inds = gt_inds
+        # print(f"[DEBUG AssignResult __init__] max_overlaps={max_overlaps}")
+        self.max_overlaps = max_overlaps
+        self.labels = labels
+        self._extra_properties = {}
+
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
     @property
     def num_preds(self):
         """int: the number of predictions in this assignment"""
@@ -183,6 +202,16 @@ class AssignResult(util_mixins.NiceRepr):
         return self
 
     def add_gt_(self, gt_labels):
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+
+        # print("[DEBUG in add_gt_] max_overlaps:", self.max_overlaps)
+        # print("[DEBUG in add_gt_] gt_labels:", gt_labels)
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         """Add ground truth as assigned results.
 
         Args:

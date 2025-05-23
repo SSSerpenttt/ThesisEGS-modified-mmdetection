@@ -41,6 +41,13 @@ class FCNMaskHead(BaseModule):
                      type='deconv', scale_factor=2),
                  conv_cfg: OptConfigType = None,
                  norm_cfg: OptConfigType = None,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+                 mask_size=28,
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
                  predictor_cfg: ConfigType = dict(type='Conv'),
                  loss_mask: ConfigType = dict(
                      type='mmdet.CrossEntropyLoss', use_mask=True, loss_weight=1.0),
@@ -68,6 +75,13 @@ class FCNMaskHead(BaseModule):
         self.class_agnostic = class_agnostic
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+        self.mask_size = mask_size
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         self.predictor_cfg = predictor_cfg
         self.loss_mask = MODELS.build(loss_mask)
 

@@ -10,6 +10,14 @@ from mmengine.config import ConfigDict
 from mmengine.structures import InstanceData
 from torch import Tensor
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+from mmdet.structures.bbox import HorizontalBoxes, BaseBoxes 
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
 from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
 from ..task_modules.prior_generators import MlvlPointGenerator
@@ -79,6 +87,13 @@ class RepPointsHead(AnchorFreeHead):
                          bias_prob=0.01)),
                  **kwargs) -> None:
         self.num_points = num_points
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+        print(f"[DEBUG] RepPointsRPNHead num_points = {self.num_points}")
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         self.point_feat_channels = point_feat_channels
         self.use_grid_points = use_grid_points
         self.center_init = center_init
@@ -104,6 +119,15 @@ class RepPointsHead(AnchorFreeHead):
             loss_cls=loss_cls,
             init_cfg=init_cfg,
             **kwargs)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+        
+        print(f"[DEBUG] RepPointsRPNHead num_points = {self.num_points}")
+        self._init_layers()
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
 
         self.gradient_mul = gradient_mul
         self.point_base_scale = point_base_scale
@@ -134,6 +158,13 @@ class RepPointsHead(AnchorFreeHead):
             self.cls_out_channels = self.num_classes
         else:
             self.cls_out_channels = self.num_classes + 1
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         self.loss_bbox_init = MODELS.build(loss_bbox_init)
         self.loss_bbox_refine = MODELS.build(loss_bbox_refine)
 
@@ -162,7 +193,33 @@ class RepPointsHead(AnchorFreeHead):
                     padding=1,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
+<<<<<<< HEAD
         pts_out_dim = 4 if self.use_grid_points else 2 * self.num_points
+=======
+<<<<<<< HEAD
+        pts_out_dim = 4 if self.use_grid_points else 2 * self.num_points
+=======
+            
+        print(f"[DEBUG] num_points = {self.num_points}")         # Should be 9
+        print(f"[DEBUG] use_grid_points = {self.use_grid_points}")  # Should be False
+
+        pts_out_dim = 4 * self.num_points
+
+        print(f"[DEBUG] pts_out_dim = {pts_out_dim}")            # Should be 36
+
+        # self.reppoints_pts_init_conv = nn.Conv2d(self.feat_channels,
+        #                                  self.point_feat_channels, 3,
+        #                                  1, 1)
+        # self.reppoints_pts_init_out = nn.Conv2d(self.point_feat_channels,
+        #                                         pts_out_dim, 1, 1, 0)
+        # self.reppoints_pts_refine_conv = DeformConv2d(self.feat_channels,
+        #                                             self.point_feat_channels,
+        #                                             self.dcn_kernel, 1,
+        #                                             self.dcn_pad)
+        # self.reppoints_pts_refine_out = nn.Conv2d(self.point_feat_channels,
+        #                                         pts_out_dim, 1, 1, 0)
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         self.reppoints_cls_conv = DeformConv2d(self.feat_channels,
                                                self.point_feat_channels,
                                                self.dcn_kernel, 1,
@@ -444,17 +501,57 @@ class RepPointsHead(AnchorFreeHead):
         gt_bboxes = gt_instances.bboxes
         gt_labels = gt_instances.labels
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+        # ✅ Fix starts here
+        if isinstance(gt_bboxes, torch.Tensor):
+            gt_instances.bboxes = HorizontalBoxes(gt_bboxes)
+            gt_bboxes = gt_instances.bboxes
+        # ✅ Fix ends here
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         if gt_bboxes.numel() == 0 or gt_bboxes.shape[0] == 0:
             print("[DEBUG] GT bboxes are empty or invalid!")
             print(f"[DEBUG] Got gt_bboxes: {gt_bboxes}")
             print(f"[DEBUG] pred_instances: {pred_instances}")
             import traceback; traceback.print_stack()
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cab23055 (Updated)
 
         assign_result = assigner.assign(pred_instances, gt_instances,
                                         gt_instances_ignore)
         sampling_result = self.sampler.sample(assign_result, pred_instances,
                                               gt_instances)
 
+<<<<<<< HEAD
+=======
+=======
+        
+        if not isinstance(pred_instances.priors, HorizontalBoxes):
+            pred_instances.priors = HorizontalBoxes(pred_instances.priors)
+
+        assign_result = assigner.assign(pred_instances, gt_instances,
+                                        gt_instances_ignore)
+        
+        # print(f"[DEBUG] assign_result.max_overlaps: {assign_result.max_overlaps}")
+        # print(f"[DEBUG] assign_result.gt_inds: {assign_result.gt_inds}")
+        
+        # print(type(gt_bboxes))
+        # print(isinstance(gt_bboxes, BaseBoxes))
+
+        sampling_result = self.sampler.sample(assign_result, pred_instances,
+                                              gt_instances)
+        
+        num_valid_proposals = proposals.shape[0]
+        # print(f'num_valid_proposals: {num_valid_proposals}')  # Should be 16709
+        
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         num_valid_proposals = proposals.shape[0]
         bbox_gt = proposals.new_zeros([num_valid_proposals, 4])
         pos_proposals = torch.zeros_like(proposals)
@@ -464,6 +561,10 @@ class RepPointsHead(AnchorFreeHead):
                                     dtype=torch.long)
         label_weights = proposals.new_zeros(
             num_valid_proposals, dtype=torch.float)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cab23055 (Updated)
 
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
@@ -473,13 +574,96 @@ class RepPointsHead(AnchorFreeHead):
             proposals_weights[pos_inds, :] = 1.0
 
             labels[pos_inds] = sampling_result.pos_gt_labels
+<<<<<<< HEAD
+=======
+=======
+        
+        pos_inds = sampling_result.pos_inds
+        neg_inds = sampling_result.neg_inds
+
+        # print(f"Raw pos_inds: {pos_inds}")
+        # print(f"Raw neg_inds: {neg_inds}")
+
+        neg_inds = neg_inds[neg_inds < label_weights.size(0)]
+        pos_inds = pos_inds[pos_inds < label_weights.size(0)]
+
+        # print(f"Filtered pos_inds: {pos_inds}")
+        # print(f"Filtered neg_inds: {neg_inds}")
+        
+        invalid_neg_inds = neg_inds[neg_inds >= label_weights.size(0)]
+        # print('Invalid neg_inds:', invalid_neg_inds)
+
+        # print(f'max pos_inds: {pos_inds.max()}')
+        # print(f'max neg_inds: {neg_inds.max()}')
+        # print(f'min pos_inds: {pos_inds.min()}')
+        # print(f'min neg_inds: {neg_inds.min()}')
+
+        # print('all neg_inds:', neg_inds)
+        # print('max neg_inds:', neg_inds.max().item())
+        # print('min neg_inds:', neg_inds.min().item())
+        # print('label_weights size:', label_weights.size(0))
+
+        # print('bbox_gt shape:', bbox_gt.shape)
+        # print('pos_inds:', pos_inds)
+        # print('pos_inds max:', pos_inds.max())
+        # print('pos_inds min:', pos_inds.min())
+        # print('pos_gt_bboxes tensor shape:', sampling_result.pos_gt_bboxes.tensor.shape)
+
+        if len(pos_inds) > 0:
+            num_pos_inds = pos_inds.shape[0]
+            num_gt = sampling_result.pos_gt_bboxes.tensor.shape[0]
+            min_len = min(num_pos_inds, num_gt)
+
+            if min_len > 0:
+              bbox_gt[pos_inds[:min_len], :] = sampling_result.pos_gt_bboxes.tensor[:min_len]
+
+            pos_proposals[pos_inds, :] = proposals[pos_inds, :]
+            # print("pos_inds:", pos_inds)
+            # print("proposals_weights shape:", proposals_weights.shape)
+
+            proposals_weights[pos_inds, :] = 1.0
+
+            # print("pos_inds:", pos_inds)
+            # print("proposals_weights shape:", proposals_weights.shape)
+
+            num_pos_inds = pos_inds.shape[0]
+            num_labels = sampling_result.pos_gt_labels.shape[0]
+            min_len = min(num_pos_inds, num_labels)
+
+            if min_len > 0:
+                labels[pos_inds[:min_len]] = sampling_result.pos_gt_labels[:min_len]
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
             if pos_weight <= 0:
                 label_weights[pos_inds] = 1.0
             else:
                 label_weights[pos_inds] = pos_weight
+<<<<<<< HEAD
         if len(neg_inds) > 0:
             label_weights[neg_inds] = 1.0
 
+=======
+<<<<<<< HEAD
+        if len(neg_inds) > 0:
+            label_weights[neg_inds] = 1.0
+
+=======
+    
+        # print('neg_inds min:', neg_inds.min().item())
+        # print('neg_inds max:', neg_inds.max().item())
+        # print('label_weights shape:', label_weights.shape)
+
+        if len(neg_inds) > 0:
+            label_weights[neg_inds] = 1.0
+
+        # print('label_weights shape:', label_weights.shape)
+        # print('neg_inds:', neg_inds)
+        # print('max neg_inds:', neg_inds.max())
+        # print('max label:', labels.max())
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         # map up to original set of proposals
         if unmap_outputs:
             num_total_proposals = flat_proposals.size(0)
@@ -830,7 +1014,17 @@ class RepPointsHead(AnchorFreeHead):
                 zip(cls_score_list, bbox_pred_list, mlvl_priors)):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             
+<<<<<<< HEAD
             print('bbox_pred.shape before permute:', bbox_pred.shape)
+=======
+<<<<<<< HEAD
+            print('bbox_pred.shape before permute:', bbox_pred.shape)
+=======
+            # print(f"[DEBUG] bbox_pred.shape = {bbox_pred.shape}")  # Should be (N, 18)
+            # print(f"[DEBUG] Trying to reshape to (-1, 9, 2)")
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
             C, H, W = bbox_pred.shape
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, C)
 
@@ -854,6 +1048,15 @@ class RepPointsHead(AnchorFreeHead):
             bbox_pred = filtered_results['bbox_pred']
             priors = filtered_results['priors']
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+            # for lvl, pred in enumerate(bbox_pred):
+            #     print(f"Level {lvl} bbox_pred shape: {pred.shape}")  # Expect [B, 18, H, W]
+
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
             bboxes = self._bbox_decode(priors, bbox_pred,
                                        self.point_strides[level_idx],
                                        img_shape)
@@ -863,7 +1066,15 @@ class RepPointsHead(AnchorFreeHead):
             mlvl_labels.append(labels)
 
         results = InstanceData()
+<<<<<<< HEAD
         results.bboxes = torch.cat(mlvl_bboxes)
+=======
+<<<<<<< HEAD
+        results.bboxes = torch.cat(mlvl_bboxes)
+=======
+        results.bboxes = HorizontalBoxes.cat(mlvl_bboxes)
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
         results.scores = torch.cat(mlvl_scores)
         results.labels = torch.cat(mlvl_labels)
 
@@ -875,6 +1086,10 @@ class RepPointsHead(AnchorFreeHead):
             img_meta=img_meta)
 
     def _bbox_decode(self, points: Tensor, bbox_pred: Tensor, stride: int,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cab23055 (Updated)
                      max_shape: Tuple[int, int]) -> Tensor:
         """Decode the prediction to bounding box.
 
@@ -895,3 +1110,63 @@ class RepPointsHead(AnchorFreeHead):
         y2 = bboxes[:, 3].clamp(min=0, max=max_shape[0])
         decoded_bboxes = torch.stack([x1, y1, x2, y2], dim=-1)
         return decoded_bboxes
+<<<<<<< HEAD
+=======
+=======
+                 max_shape: Tuple[int, int]) -> Tensor:
+        """Decode 9-point prediction to bounding box.
+
+        Args:
+            points (Tensor): shape (N, 2) – prior center locations.
+            bbox_pred (Tensor): shape (N, 36) – 9 points × (left, top, right, bottom).
+            stride (int): Stride value per FPN level.
+            max_shape (Tuple[int, int]): Image shape (height, width).
+
+        Returns:
+            Tensor: Decoded bounding boxes of shape (N, 4)
+        """
+        assert bbox_pred.numel() % 36 == 0, "Shape error: bbox_pred is not divisible by 36"
+
+        # Reshape to (N, 9, 4) because 9 points × 4 distances
+        pred_distances = bbox_pred.view(-1, 9, 4)  # (N, 9, 4)
+
+        # Now decode each point's distances to bounding boxes
+        # points: (N, 2) -> centers
+        # For each point: 
+        # bbox_left = x_center - left_distance * stride
+        # bbox_top = y_center - top_distance * stride
+        # bbox_right = x_center + right_distance * stride
+        # bbox_bottom = y_center + bottom_distance * stride
+
+        x_centers = points[:, 0].unsqueeze(1)  # (N, 1)
+        y_centers = points[:, 1].unsqueeze(1)  # (N, 1)
+
+        # Extract distances
+        left = pred_distances[:, :, 0] * stride
+        top = pred_distances[:, :, 1] * stride
+        right = pred_distances[:, :, 2] * stride
+        bottom = pred_distances[:, :, 3] * stride
+
+        # Convert distances to point bounding boxes for each point
+        x1 = x_centers - left  # (N, 9)
+        y1 = y_centers - top
+        x2 = x_centers + right
+        y2 = y_centers + bottom
+
+        # For each sample, take min x1, min y1, max x2, max y2 among 9 points
+        x_min, _ = x1.min(dim=1)
+        y_min, _ = y1.min(dim=1)
+        x_max, _ = x2.max(dim=1)
+        y_max, _ = y2.max(dim=1)
+
+        # Clamp to image boundaries
+        x_min = x_min.clamp(min=0, max=max_shape[1])
+        y_min = y_min.clamp(min=0, max=max_shape[0])
+        x_max = x_max.clamp(min=0, max=max_shape[1])
+        y_max = y_max.clamp(min=0, max=max_shape[0])
+
+        decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
+
+        return HorizontalBoxes(decoded_bboxes)
+>>>>>>> ab9e3478 (Updated)
+>>>>>>> cab23055 (Updated)
