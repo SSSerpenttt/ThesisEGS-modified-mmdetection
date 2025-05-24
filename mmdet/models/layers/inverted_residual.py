@@ -5,7 +5,7 @@ from mmcv.cnn import ConvModule
 from mmcv.cnn.bricks import DropPath
 from mmengine.model import BaseModule
 
-from .se_layer import SELayer
+from mmdet.models.layers.se_layer import SELayer
 
 
 class InvertedResidual(BaseModule):
