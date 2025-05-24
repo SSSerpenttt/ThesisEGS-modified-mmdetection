@@ -10,10 +10,10 @@ from torch import Tensor
 from mmdet.structures.bbox import HorizontalBoxes, BaseBoxes
 from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
-from ..task_modules.prior_generators import MlvlPointGenerator
-from ..task_modules.samplers import PseudoSampler
-from ..utils import (filter_scores_and_topk, images_to_levels, multi_apply, unmap)
-from .anchor_free_head import AnchorFreeHead
+from mmdet.models.task_modules.prior_generators import MlvlPointGenerator
+from mmdet.models.task_modules.samplers import PseudoSampler
+from mmdet.utils import (filter_scores_and_topk, images_to_levels, multi_apply, unmap)
+from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 
 
 
