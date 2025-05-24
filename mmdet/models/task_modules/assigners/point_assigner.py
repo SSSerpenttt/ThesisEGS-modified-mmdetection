@@ -25,23 +25,24 @@ class PointAssigner(BaseAssigner):
         self.pos_num = pos_num
 
     def assign(self,
-           pred_instances: InstanceData,
-           gt_instances: InstanceData,
-           gt_instances_ignore: Optional[InstanceData] = None,
-           **kwargs) -> AssignResult:
+               pred_instances: InstanceData,
+               gt_instances: InstanceData,
+               gt_instances_ignore: Optional[InstanceData] = None,
+               **kwargs) -> AssignResult:
         """Assign gt to points.
 
-        (docstring unchanged for brevity)
+        Args:
+            pred_instances (:obj:`InstanceData`): Instances of model
+                predictions. It includes ``priors`` which are points.
+            gt_instances (:obj:`InstanceData`): Ground truth of instance
+                annotations. It usually includes ``bboxes`` and ``labels``.
+            gt_instances_ignore (:obj:`InstanceData`, optional): Instances
+                to be ignored during training.
+
+        Returns:
+            :obj:`AssignResult`: The assign result.
         """
-<<<<<<< HEAD
-
-=======
-<<<<<<< HEAD
-
-=======
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
-    # Extract gt_bboxes safely from gt_instances
+        # Extract gt_bboxes safely from gt_instances
         if gt_instances is None or not hasattr(gt_instances, 'bboxes'):
             # No gt instances or no bboxes attribute -> no ground truth
             gt_bboxes = None
@@ -56,41 +57,19 @@ class PointAssigner(BaseAssigner):
 
         # Check if gt_bboxes is valid tensor and not empty
         if (gt_bboxes is None
-            or not isinstance(gt_bboxes, torch.Tensor)
-            or gt_bboxes.numel() == 0
-            or gt_bboxes.shape[0] == 0):
+                or not isinstance(gt_bboxes, torch.Tensor)
+                or gt_bboxes.numel() == 0
+                or gt_bboxes.shape[0] == 0):
             # No ground truth boxes, assign all points as background
             num_points = pred_instances.priors.shape[0]
             assigned_gt_inds = pred_instances.priors.new_full((num_points,), 0, dtype=torch.long)
             assigned_labels = pred_instances.priors.new_full((num_points,), -1, dtype=torch.long)
             
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> cab23055 (Updated)
-            return AssignResult(
-                num_gts=0,
-                gt_inds=assigned_gt_inds,
-                max_overlaps=None,
-<<<<<<< HEAD
-=======
-=======
-            # if (assigned_gt_inds > 0).sum() == 0:
-            #   print("[WARNING] No points assigned in init stage!")
-
-            # print("[DEBUG] Returning AssignResult (no GTs):")
-            # print(f"  assigned_gt_inds: {assigned_gt_inds}")
-            # print(f"  max_overlaps: None")
-            # print(f"  labels: {assigned_labels}")
-
             dummy_overlaps = pred_instances.priors.new_zeros((num_points,))
-
             return AssignResult(
                 num_gts=0,
                 gt_inds=assigned_gt_inds,
                 max_overlaps=dummy_overlaps,
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
                 labels=assigned_labels)
 
         # Now it's safe to proceed
@@ -107,7 +86,7 @@ class PointAssigner(BaseAssigner):
         gt_bboxes_wh = (gt_bboxes[:, 2:] - gt_bboxes[:, :2]).clamp(min=1e-6)
         scale = self.scale
         gt_bboxes_lvl = ((torch.log2(gt_bboxes_wh[:, 0] / scale) +
-                        torch.log2(gt_bboxes_wh[:, 1] / scale)) / 2).int()
+                          torch.log2(gt_bboxes_wh[:, 1] / scale)) / 2).int()
         gt_bboxes_lvl = torch.clamp(gt_bboxes_lvl, min=lvl_min, max=lvl_max)
 
         assigned_gt_inds = points.new_zeros((num_points,), dtype=torch.long)
@@ -118,16 +97,6 @@ class PointAssigner(BaseAssigner):
             gt_lvl = gt_bboxes_lvl[idx]
             lvl_idx = gt_lvl == points_lvl
             points_index = points_range[lvl_idx]
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-
-            # print(f'[DEBUG] GT #{idx}: assigned level={gt_lvl},'
-            # f'matched point candidates={len(points_index)}')
-
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
             lvl_points = points_xy[lvl_idx, :]
             gt_point = gt_bboxes_xy[[idx], :]
             gt_wh = gt_bboxes_wh[[idx], :]
@@ -139,48 +108,14 @@ class PointAssigner(BaseAssigner):
             assigned_gt_inds[min_dist_points_index] = idx + 1
             assigned_gt_dist[min_dist_points_index] = min_dist[less_than_recorded_index]
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-        # print(f'[DEBUG] Total assigned positive points: {(assigned_gt_inds > 0).sum().item()}')
-
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
         assigned_labels = assigned_gt_inds.new_full((num_points,), -1)
         pos_inds = torch.nonzero(assigned_gt_inds > 0, as_tuple=False).squeeze()
         if pos_inds.numel() > 0 and gt_labels is not None:
             assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] - 1]
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-        
-        # print("[DEBUG] Returning AssignResult (with GTs):")
-        # print(f"  num_gts: {num_gts}")
-        # print(f"  assigned_gt_inds: {assigned_gt_inds}")
-        # print(f"  max_overlaps: None")
-        # print(f"  labels: {assigned_labels}")
 
         dummy_overlaps = pred_instances.priors.new_zeros((num_points,))
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
-
         return AssignResult(
             num_gts=num_gts,
             gt_inds=assigned_gt_inds,
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> cab23055 (Updated)
-            max_overlaps=None,
-            labels=assigned_labels)
-
-
-<<<<<<< HEAD
-=======
-=======
             max_overlaps=dummy_overlaps,
             labels=assigned_labels)
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
