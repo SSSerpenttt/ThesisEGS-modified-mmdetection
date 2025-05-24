@@ -102,6 +102,8 @@ class InvertedResidual(BaseModule):
             norm_cfg=norm_cfg,
             act_cfg=None)
 
+        self.out_channels = out_channels
+
     def forward(self, x):
 
         def _inner_forward(x):
