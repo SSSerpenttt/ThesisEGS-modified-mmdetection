@@ -178,19 +178,6 @@ class MaxIoUAssigner(BaseAssigner):
 
         Returns:
             :obj:`AssignResult`: The assign result.
-
-        Example:
-            >>> from mmengine.structures import InstanceData
-            >>> self = MaxIoUAssigner(0.5, 0.5)
-            >>> pred_instances = InstanceData()
-            >>> pred_instances.priors = torch.Tensor([[0, 0, 10, 10],
-            ...                                      [10, 10, 20, 20]])
-            >>> gt_instances = InstanceData()
-            >>> gt_instances.bboxes = torch.Tensor([[0, 0, 10, 9]])
-            >>> gt_instances.labels = torch.Tensor([0])
-            >>> assign_result = self.assign(pred_instances, gt_instances)
-            >>> expected_gt_inds = torch.LongTensor([1, 0])
-            >>> assert torch.all(assign_result.gt_inds == expected_gt_inds)
         """
         gt_bboxes = gt_instances.bboxes
         priors = pred_instances.priors
@@ -232,13 +219,6 @@ class MaxIoUAssigner(BaseAssigner):
             overlaps[:, ignore_max_overlaps > self.ignore_iof_thr] = -1
 
         assign_result = self.assign_wrt_overlaps(overlaps, gt_labels)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-        # print(f"[DEBUG assign()] max_overlaps after assign_wrt_overlaps: {assign_result.max_overlaps}")
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
         if assign_on_cpu:
             assign_result.gt_inds = assign_result.gt_inds.to(device)
             assign_result.max_overlaps = assign_result.max_overlaps.to(device)
@@ -258,16 +238,7 @@ class MaxIoUAssigner(BaseAssigner):
         Returns:
             :obj:`AssignResult`: The assign result.
         """
-<<<<<<< HEAD
         num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
-=======
-<<<<<<< HEAD
-        num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
-=======
-        num_gts = int(overlaps.size(0))
-        num_bboxes = int(overlaps.size(1))
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
 
         # 1. assign -1 by default
         assigned_gt_inds = overlaps.new_full((num_bboxes, ),
@@ -314,11 +285,6 @@ class MaxIoUAssigner(BaseAssigner):
             # Low-quality matching will overwrite the assigned_gt_inds assigned
             # in Step 3. Thus, the assigned gt might not be the best one for
             # prediction.
-            # For example, if bbox A has 0.9 and 0.8 iou with GT bbox 1 & 2,
-            # bbox 1 will be assigned as the best target for bbox A in step 3.
-            # However, if GT bbox 2's gt_argmax_overlaps = A, bbox A's
-            # assigned_gt_inds will be overwritten to be bbox 2.
-            # This might be the reason that it is not used in ROI Heads.
             for i in range(num_gts):
                 if gt_max_overlaps[i] >= self.min_pos_iou:
                     if self.gt_max_assign_all:
@@ -334,27 +300,8 @@ class MaxIoUAssigner(BaseAssigner):
             assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] -
                                                   1]
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> cab23055 (Updated)
         return AssignResult(
             num_gts=num_gts,
             gt_inds=assigned_gt_inds,
             max_overlaps=max_overlaps,
             labels=assigned_labels)
-<<<<<<< HEAD
-=======
-=======
-        # print(f"[DEBUG assign_wrt_overlaps()] max_overlaps: {max_overlaps}")
-        # print(f"[DEBUG assign_wrt_overlaps()] type max_overlaps: {type(max_overlaps)}")
-        # print(f"[DEBUG assign_wrt_overlaps()] assigned_gt_inds: {assigned_gt_inds}")
-        # print(f"[DEBUG assign_wrt_overlaps()] assigned_labels: {assigned_labels}")
-
-        return AssignResult(
-            num_gts,
-            assigned_gt_inds,
-            max_overlaps,
-            assigned_labels)
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
