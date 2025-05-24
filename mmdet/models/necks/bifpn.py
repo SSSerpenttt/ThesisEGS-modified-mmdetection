@@ -43,6 +43,7 @@ class BiFPN(nn.Module):
         self.stack = stack
         self.fusion_method = fusion_method
         self.conv_cfg = conv_cfg
+        self.norm_cfg = norm_cfg
 
         if end_level == -1:
             self.backbone_end_level = self.num_ins
