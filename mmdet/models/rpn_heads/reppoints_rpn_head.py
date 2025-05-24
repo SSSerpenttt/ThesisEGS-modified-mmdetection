@@ -119,6 +119,92 @@ class RepPointsRPNHead(AnchorFreeHead):
                 data=torch.zeros(2), requires_grad=True)
             self.moment_mul = moment_mul
 
+    def get_targets(self,
+                   points: List[Tensor],
+                   batch_gt_instances: InstanceList,
+                   batch_img_metas: List[dict],
+                   batch_gt_instances_ignore: OptInstanceList = None,
+                   stage: str = 'init',
+                   return_sampling_results: bool = False) -> tuple:
+        """Compute regression and classification targets for points.
+        
+        Args:
+            points (list[Tensor]): Points of each fpn level, each has shape
+                (num_points, 2).
+            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
+            batch_img_metas (list[dict]): Meta info of each image.
+            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
+                Batch of instances to be ignored.
+            stage (str): 'init' or 'refine'. Default: 'init'
+            return_sampling_results (bool): Whether to return sampling results.
+        
+        Returns:
+            tuple:
+                - labels_list (list[Tensor]): Labels of each level.
+                - label_weights_list (list[Tensor]): Label weights of each level.
+                - bbox_gt_list (list[Tensor]): Ground truth bboxes of each level.
+                - candidate_list (list[Tensor]): Candidates of each level.
+                - bbox_weights_list (list[Tensor]): Bbox weights of each level.
+                - avg_factor (int): Average factor that is used to average the loss.
+        """
+        # Convert points to proposals format expected by get_targets
+        proposals_list = []
+        valid_flag_list = []
+        for img_id, img_meta in enumerate(batch_img_metas):
+            proposals = []
+            valid_flags = []
+            for i, points_per_level in enumerate(points):
+                proposals.append(points_per_level)
+                valid_flags.append(
+                    torch.ones((points_per_level.shape[0],),
+                    dtype=torch.bool,
+                    device=points_per_level.device))
+            proposals_list.append(proposals)
+            valid_flag_list.append(valid_flags)
+    
+        # Call the existing get_targets implementation
+        return self.get_targets(
+            proposals_list=proposals_list,
+            valid_flag_list=valid_flag_list,
+            batch_gt_instances=batch_gt_instances,
+            batch_img_metas=batch_img_metas,
+            batch_gt_instances_ignore=batch_gt_instances_ignore,
+            stage=stage,
+            return_sampling_results=return_sampling_results)
+
+    def loss_by_feat(self,
+                    cls_scores: List[Tensor],
+                    bbox_preds: List[Tensor],
+                    batch_gt_instances: InstanceList,
+                    batch_img_metas: List[dict],
+                    batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+        """Calculate the loss based on the features extracted by the detection head.
+        
+        Args:
+            cls_scores (list[Tensor]): Box scores for each scale level.
+            bbox_preds (list[Tensor]): Box energies / deltas for each scale level.
+            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
+            batch_img_metas (list[dict]): Meta information of each image.
+            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
+                Batch of instances to be ignored.
+        
+        Returns:
+            dict[str, Tensor]: A dictionary of loss components.
+        """
+        # Split bbox_preds into init and refine predictions
+        num_levels = len(cls_scores)
+        pts_preds_init = bbox_preds[:num_levels]
+        pts_preds_refine = bbox_preds[num_levels:]
+        
+        # Call the existing loss method
+        return self.loss(
+            cls_scores,
+            pts_preds_init,
+            pts_preds_refine,
+            batch_gt_instances,
+            batch_img_metas,
+            batch_gt_instances_ignore)
+    
     def _init_layers(self) -> None:
         """Initialize layers of the head."""
         self.relu = nn.ReLU(inplace=True)
