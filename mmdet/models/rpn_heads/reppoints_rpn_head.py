@@ -460,21 +460,9 @@ class RepPointsRPNHead(AnchorFreeHead):
         return loss_cls, loss_pts_init, loss_pts_refine
 
     def get_bboxes(self, cls_scores: List[Tensor], pts_preds_refine: List[Tensor],
-                   batch_img_metas: List[dict], cfg: ConfigDict = None,
-                   rescale: bool = False, with_nms: bool = True) -> InstanceList:
-        """Transform network outputs of a batch into bbox results.
-        
-        Args:
-            cls_scores (list[Tensor]): Classification scores for each level.
-            pts_preds_refine (list[Tensor]): Refined points predictions.
-            batch_img_metas (list[dict]): Meta info of each image.
-            cfg (ConfigDict): Test / postprocessing configuration.
-            rescale (bool): If True, return boxes in original image space.
-            with_nms (bool): If True, do nms before return boxes.
-            
-        Returns:
-            list[:obj:`InstanceData`]: Object detection results of each image.
-        """
+                  batch_img_metas: List[dict], cfg: ConfigDict = None,
+                  rescale: bool = False, with_nms: bool = True) -> InstanceList:
+        """Transform network outputs of a batch into bbox results."""
         assert len(cls_scores) == len(pts_preds_refine)
         cfg = self.test_cfg if cfg is None else cfg
         
@@ -491,6 +479,7 @@ class RepPointsRPNHead(AnchorFreeHead):
             img_meta = batch_img_metas[img_id]
             cls_score_list = [
                 cls_scores[i][img_id].detach() for i in range(num_levels)
+            ]  # Fixed: Added missing closing bracket
             bbox_pred_list = [
                 pts_preds_refine[i][img_id].detach() for i in range(num_levels)]
             
