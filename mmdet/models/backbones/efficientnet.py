@@ -266,7 +266,7 @@ class EfficientNet(BaseModule):
         self.act_cfg = act_cfg
         self.norm_eval = norm_eval
         self.with_cp = with_cp
-
+        
         # Build model
         self._build_model()
 
@@ -326,53 +326,60 @@ class EfficientNet(BaseModule):
             self.in_channels = layer[-1].out_channels
 
     def _build_block(self, block_cfg, drop_path_rate):
-        """Build a single block based on configuration."""
-        kernel_size, out_channels, se_ratio, stride, expand_ratio, block_type = block_cfg
-        out_channels = make_divisible(out_channels, 8)
-        mid_channels = int(self.in_channels * expand_ratio)
-        
-        # Configure SE layer
-        se_cfg = None
-        if se_ratio > 0:
-            se_cfg = dict(
-                channels=mid_channels,
-                ratio=expand_ratio * se_ratio,
-                act_cfg=(self.act_cfg, dict(type='Sigmoid')))
-        
-        # Select block type
-        if block_type == 1:  # EdgeResidual
-            with_residual = not (expand_ratio == 3 and stride > 1)
-            if not with_residual:
-                expand_ratio = 4  # Adjust for non-residual path
-            mid_channels = int(self.in_channels * expand_ratio)
-            
-            return EdgeResidual(
-                in_channels=self.in_channels,
-                out_channels=out_channels,
-                mid_channels=mid_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                se_cfg=se_cfg,
-                with_residual=with_residual,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg,
-                drop_path_rate=drop_path_rate,
-                with_cp=self.with_cp)
-        else:  # InvertedResidual
-            return InvertedResidual(
-                in_channels=self.in_channels,
-                out_channels=out_channels,
-                mid_channels=mid_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                se_cfg=se_cfg,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg,
-                drop_path_rate=drop_path_rate,
-                with_cp=self.with_cp,
-                with_expand_conv=(mid_channels != self.in_channels))
+      """Build a single block with strict channel validation."""
+      kernel_size, out_channels, se_ratio, stride, expand_ratio, block_type = block_cfg
+      
+      # Ensure all channels are divisible by 8
+      out_channels = make_divisible(out_channels, 8)
+      mid_channels = make_divisible(self.in_channels * expand_ratio, 8)
+      
+      # For EfficientNet-b3, we need to ensure specific channel counts
+      if self.arch_setting == self.arch_settings['b3']:
+          if expand_ratio == 6:  # Standard expansion for b3
+              mid_channels = make_divisible(self.in_channels * 6, 8)
+      
+      # Configure SE layer
+      se_cfg = None
+      if se_ratio > 0:
+          se_cfg = dict(
+              channels=mid_channels,
+              ratio=se_ratio,
+              act_cfg=(self.act_cfg, dict(type='Sigmoid')))
+      
+      # Select block type
+      if block_type == 1:  # EdgeResidual
+          with_residual = not (expand_ratio == 3 and stride > 1)
+          if not with_residual:
+              expand_ratio = 4  # Adjust for non-residual path
+          mid_channels = make_divisible(self.in_channels * expand_ratio, 8)
+          
+          return EdgeResidual(
+              in_channels=self.in_channels,
+              out_channels=out_channels,
+              mid_channels=mid_channels,
+              kernel_size=kernel_size,
+              stride=stride,
+              se_cfg=se_cfg,
+              with_residual=with_residual,
+              conv_cfg=self.conv_cfg,
+              norm_cfg=self.norm_cfg,
+              act_cfg=self.act_cfg,
+              drop_path_rate=drop_path_rate,
+              with_cp=self.with_cp)
+      else:  # InvertedResidual
+          return InvertedResidual(
+              in_channels=self.in_channels,
+              out_channels=out_channels,
+              mid_channels=mid_channels,
+              kernel_size=kernel_size,
+              stride=stride,
+              se_cfg=se_cfg,
+              conv_cfg=self.conv_cfg,
+              norm_cfg=self.norm_cfg,
+              act_cfg=self.act_cfg,
+              drop_path_rate=drop_path_rate,
+              with_cp=self.with_cp,
+              with_expand_conv=(mid_channels != self.in_channels))
 
     def forward(self, x):
         """Enhanced forward pass with better input handling."""
