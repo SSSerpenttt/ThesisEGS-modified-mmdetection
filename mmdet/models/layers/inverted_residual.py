@@ -9,35 +9,7 @@ from mmdet.models.layers.se_layer import SELayer
 
 
 class InvertedResidual(BaseModule):
-    """Inverted Residual Block.
-
-    Args:
-        in_channels (int): The input channels of this Module.
-        out_channels (int): The output channels of this Module.
-        mid_channels (int): The input channels of the depthwise convolution.
-        kernel_size (int): The kernel size of the depthwise convolution.
-            Default: 3.
-        stride (int): The stride of the depthwise convolution. Default: 1.
-        se_cfg (dict): Config dict for se layer. Default: None, which means no
-            se layer.
-        with_expand_conv (bool): Use expand conv or not. If set False,
-            mid_channels must be the same with in_channels.
-            Default: True.
-        conv_cfg (dict): Config dict for convolution layer. Default: None,
-            which means using conv2d.
-        norm_cfg (dict): Config dict for normalization layer.
-            Default: dict(type='BN').
-        act_cfg (dict): Config dict for activation layer.
-            Default: dict(type='ReLU').
-        drop_path_rate (float): stochastic depth rate. Defaults to 0.
-        with_cp (bool): Use checkpoint or not. Using checkpoint will save some
-            memory while slowing down the training speed. Default: False.
-        init_cfg (dict or list[dict], optional): Initialization config dict.
-            Default: None
-
-    Returns:
-        Tensor: The output tensor.
-    """
+    """Fixed Inverted Residual Block with proper channel validation."""
 
     def __init__(self,
                  in_channels,
@@ -54,12 +26,17 @@ class InvertedResidual(BaseModule):
                  with_cp=False,
                  init_cfg=None):
         super(InvertedResidual, self).__init__(init_cfg)
+        self.out_channels = out_channels
+        
+        # Validate channel dimensions
+        assert mid_channels % 8 == 0, f"mid_channels ({mid_channels}) must be divisible by 8"
+        assert in_channels % 8 == 0, f"in_channels ({in_channels}) must be divisible by 8"
+        assert out_channels % 8 == 0, f"out_channels ({out_channels}) must be divisible by 8"
+        
         self.with_res_shortcut = (stride == 1 and in_channels == out_channels)
-        assert stride in [1, 2], f'stride must in [1, 2]. ' \
-            f'But received {stride}.'
+        assert stride in [1, 2], f'stride must in [1, 2]. Received {stride}.'
         self.with_cp = with_cp
-        self.drop_path = DropPath(
-            drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
         self.with_se = se_cfg is not None
         self.with_expand_conv = with_expand_conv
 
@@ -78,6 +55,8 @@ class InvertedResidual(BaseModule):
                 conv_cfg=conv_cfg,
                 norm_cfg=norm_cfg,
                 act_cfg=act_cfg)
+        
+        # Depthwise convolution with proper group validation
         self.depthwise_conv = ConvModule(
             in_channels=mid_channels,
             out_channels=mid_channels,
@@ -102,15 +81,15 @@ class InvertedResidual(BaseModule):
             norm_cfg=norm_cfg,
             act_cfg=None)
 
-        self.out_channels = out_channels
-
     def forward(self, x):
-
         def _inner_forward(x):
             out = x
 
             if self.with_expand_conv:
                 out = self.expand_conv(out)
+                # Validate expanded channels match groups
+                assert out.size(1) == self.depthwise_conv.conv.groups, \
+                    f"Channels {out.size(1)} must match groups {self.depthwise_conv.conv.groups}"
 
             out = self.depthwise_conv(out)
 
