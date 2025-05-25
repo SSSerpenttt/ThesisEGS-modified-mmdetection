@@ -9,14 +9,9 @@ from mmengine.runner import Runner
 
 from mmdet.utils import setup_cache_size_limit_of_dynamo
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
 import torch
 torch.autograd.set_detect_anomaly(True)
->>>>>>> ab9e3478 (Updated)
->>>>>>> cab23055 (Updated)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
