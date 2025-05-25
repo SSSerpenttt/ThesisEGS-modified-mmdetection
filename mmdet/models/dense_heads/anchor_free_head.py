@@ -14,6 +14,7 @@ from mmdet.utils import (ConfigType, InstanceList, MultiConfig, OptConfigType,
 from ..task_modules.prior_generators import MlvlPointGenerator
 from ..utils import multi_apply
 from .base_dense_head import BaseDenseHead
+from mmdet.models.losses.iou_loss import IoULoss
 
 StrideType = Union[Sequence[int], Sequence[Tuple[int, int]]]
 
