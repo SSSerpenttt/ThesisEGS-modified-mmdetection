@@ -11,6 +11,9 @@ from mmdet.structures import SampleList
 from mmdet.utils import ConfigType, OptConfigType, OptMultiConfig
 from .base import BaseDetector
 
+from mmengine.structures import InstanceData
+from mmdet.structures import DetDataSample
+
 
 @MODELS.register_module()
 class TwoStageDetector(BaseDetector):
@@ -139,59 +142,49 @@ class TwoStageDetector(BaseDetector):
         results = results + (roi_outs, )
         return results
 
-    def loss(self, batch_inputs: Tensor,
-             batch_data_samples: SampleList) -> dict:
-        """Calculate losses from a batch of inputs and data samples.
+    def loss(self, batch_inputs: Tensor, batch_data_samples: SampleList) -> dict:
+        """Calculate losses from a batch of inputs and data samples."""
+        print(f"Type of batch_data_samples: {type(batch_data_samples)}")
+        if isinstance(batch_data_samples, tuple):
+            print(f"Length of tuple batch_data_samples: {len(batch_data_samples)}")
+            batch_data_samples = batch_data_samples[0]
+        print(f"Type after adjustment: {type(batch_data_samples)}")
 
-        Args:
-            batch_inputs (Tensor): Input images of shape (N, C, H, W).
-                These should usually be mean centered and std scaled.
-            batch_data_samples (List[:obj:`DetDataSample`]): The batch
-                data samples. It usually includes information such
-                as `gt_instance` or `gt_panoptic_seg` or `gt_sem_seg`.
-
-        Returns:
-            dict: A dictionary of loss components
-        """
         x = self.extract_feat(batch_inputs)
-
         losses = dict()
 
         # RPN forward and loss
         if self.with_rpn:
-            proposal_cfg = self.train_cfg.get('rpn_proposal',
-                                              self.test_cfg.rpn)
-            rpn_data_samples = copy.deepcopy(batch_data_samples)
-        for i, data_sample in enumerate(rpn_data_samples):
-            if isinstance(data_sample, (tuple, list)):
-                # replace tuple/list with its last element (assuming it's the data sample)
-                rpn_data_samples[i] = data_sample[-1]
-
-            # Now safe to modify labels:
-            gt_instances = rpn_data_samples[i].gt_instances
-            if hasattr(gt_instances, 'labels'):
-                gt_instances.labels = torch.zeros_like(gt_instances.labels)
-            else:
-                gt_instances.labels = torch.tensor([], dtype=torch.long)
+            proposal_cfg = self.train_cfg.get('rpn_proposal', self.test_cfg.rpn)
+            
+            # Create RPN-specific data samples
+            rpn_data_samples = []
+            for data_sample in batch_data_samples:
+                if isinstance(data_sample, tuple):
+                    data_sample = data_sample[0]
+                rpn_instances = InstanceData()
+                rpn_instances.bboxes = data_sample.gt_instances.bboxes
+                rpn_instances.labels = torch.zeros_like(data_sample.gt_instances.labels)
+                rpn_sample = DetDataSample()
+                rpn_sample.gt_instances = rpn_instances
+                rpn_sample.set_metainfo(data_sample.metainfo)
+                rpn_data_samples.append(rpn_sample)
 
             rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
-            # avoid get same name with roi_head loss
-            keys = rpn_losses.keys()
-            for key in list(keys):
+            
+            # Rename losses to include 'rpn_' prefix
+            for key in list(rpn_losses.keys()):
                 if 'loss' in key and 'rpn' not in key:
                     rpn_losses[f'rpn_{key}'] = rpn_losses.pop(key)
             losses.update(rpn_losses)
         else:
-            assert batch_data_samples[0].get('proposals', None) is not None
-            # use pre-defined proposals in InstanceData for the second stage
-            # to extract ROI features.
             rpn_results_list = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
 
-        roi_losses = self.roi_head.loss(x, rpn_results_list,
-                                        batch_data_samples)
+        # ROI head losses
+        roi_losses = self.roi_head.loss(x, rpn_results_list, batch_data_samples)
         losses.update(roi_losses)
 
         return losses
