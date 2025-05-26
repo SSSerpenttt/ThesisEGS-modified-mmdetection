@@ -174,36 +174,38 @@ class RepPointsRPNHead(AnchorFreeHead):
 
     def loss_by_feat(self,
                     cls_scores: List[Tensor],
-                    bbox_preds: List[Tensor],
-                    batch_gt_instances: InstanceList,
-                    batch_img_metas: List[dict],
-                    batch_gt_instances_ignore: OptInstanceList = None) -> dict:
-        """Calculate the loss based on the features extracted by the detection head.
-        
-        Args:
-            cls_scores (list[Tensor]): Box scores for each scale level.
-            bbox_preds (list[Tensor]): Box energies / deltas for each scale level.
-            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
-            batch_img_metas (list[dict]): Meta information of each image.
-            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
-                Batch of instances to be ignored.
-        
-        Returns:
-            dict[str, Tensor]: A dictionary of loss components.
-        """
-        # Split bbox_preds into init and refine predictions
-        num_levels = len(cls_scores)
-        pts_preds_init = bbox_preds[:num_levels]
-        pts_preds_refine = bbox_preds[num_levels:]
-        
-        # Call the existing loss method
+                    pts_preds_init: List[Tensor],
+                    pts_preds_refine: List[Tensor],
+                    gt_bboxes: List[Tensor],
+                    gt_labels: List[Tensor],
+                    img_metas: List[dict],
+                    gt_bboxes_ignore: Optional[List[Tensor]] = None) -> dict:
+        # Convert gt_bboxes + gt_labels into batch_gt_instances
+        batch_gt_instances = []
+        for bboxes, labels in zip(gt_bboxes, gt_labels):
+            instance = InstanceData()
+            instance.bboxes = bboxes
+            instance.labels = labels
+            batch_gt_instances.append(instance)
+
+        # Optional ignore
+        batch_gt_instances_ignore = []
+        if gt_bboxes_ignore is not None:
+            for ignore in gt_bboxes_ignore:
+                instance = InstanceData()
+                instance.bboxes = ignore
+                batch_gt_instances_ignore.append(instance)
+        else:
+            batch_gt_instances_ignore = None
+
         return self.loss(
             cls_scores,
             pts_preds_init,
             pts_preds_refine,
             batch_gt_instances,
-            batch_img_metas,
+            img_metas,
             batch_gt_instances_ignore)
+
     
     def _init_layers(self) -> None:
         """Initialize layers of the head."""
