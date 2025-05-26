@@ -98,12 +98,15 @@ class TwoStageDetector(BaseDetector):
         return hasattr(self, 'roi_head') and self.roi_head is not None
 
     def extract_feat(self, batch_inputs):
-        # ✅ Fix: Convert list of tensors to a batch tensor
-        if isinstance(batch_inputs, list):
-            batch_inputs = torch.stack(batch_inputs, dim=0)
-            
-        x = self.backbone(batch_inputs)
-        return x
+          if isinstance(batch_inputs, list):
+              batch_inputs = torch.stack(batch_inputs, dim=0)
+          x = self.backbone(batch_inputs)
+          if self.with_neck:
+              x = self.neck(x)
+              print("Neck output shapes:", [feat.shape for feat in x])
+          else:
+              print("No neck used")
+          return x
 
     def _forward(self, batch_inputs: Tensor,
                  batch_data_samples: SampleList) -> tuple:
