@@ -243,17 +243,23 @@ class RepPointsRPNHead(AnchorFreeHead):
             gt_bboxes_ignore = HorizontalBoxes(gt_bboxes_ignore)
         
         # Convert points to bboxes for assignment
-        # Since MaxIoUAssigner expects bboxes, not points
         point_bboxes = self.points2bbox(flat_points.unsqueeze(0)).squeeze(0)
         
-        # Assign targets - only pass required arguments
+        # Convert HorizontalBoxes to tensor for assignment
+        gt_bboxes_tensor = gt_bboxes.tensor
+        if gt_bboxes_ignore is not None:
+            gt_bboxes_ignore_tensor = gt_bboxes_ignore.tensor
+        else:
+            gt_bboxes_ignore_tensor = None
+        
+        # Assign targets - pass tensors instead of HorizontalBoxes objects
         assign_result = self.assigner.assign(
             point_bboxes,  # Converted to bboxes
-            gt_bboxes,
-            gt_bboxes_ignore)
+            gt_bboxes_tensor,
+            gt_bboxes_ignore_tensor)
         
         # Rest of your method remains the same...
-        sampling_result = self.sampler.sample(assign_result, point_bboxes, gt_bboxes)
+        sampling_result = self.sampler.sample(assign_result, point_bboxes, gt_bboxes_tensor)
         
         # Prepare targets
         num_valid_points = flat_points.shape[0]
@@ -270,7 +276,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         if len(pos_inds) > 0:
             # RPN only has one class (object vs background)
             labels[pos_inds] = 0
-            pos_bbox_gt = sampling_result.pos_gt_bboxes.tensor
+            pos_bbox_gt = sampling_result.pos_gt_bboxes
             bbox_gt[pos_inds, :] = pos_bbox_gt
             bbox_weights[pos_inds, :] = 1.0
         
