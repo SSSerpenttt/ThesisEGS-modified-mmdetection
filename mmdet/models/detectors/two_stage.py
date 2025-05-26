@@ -98,26 +98,11 @@ class TwoStageDetector(BaseDetector):
         return hasattr(self, 'roi_head') and self.roi_head is not None
 
     def extract_feat(self, batch_inputs):
-        """Extract features from images."""
+        # ✅ Fix: Convert list of tensors to a batch tensor
+        if isinstance(batch_inputs, list):
+            batch_inputs = torch.stack(batch_inputs, dim=0)
+            
         x = self.backbone(batch_inputs)
-        
-        # Debug print to verify backbone output
-        print(f"Backbone features: {[f.shape for f in x]}")
-        
-        # Process through neck if exists
-        if self.with_neck:
-            if isinstance(x, (list, tuple)):
-                x = self.neck(x)
-            else:
-                x = self.neck([x])
-        
-        # Debug print to verify neck output
-        if self.with_neck:
-            print(f"Neck features: {[f.shape for f in x] if isinstance(x, (list, tuple)) else x.shape}")
-        
-        # Return features in format expected by heads
-        if isinstance(x, (list, tuple)):
-            return x[0] if len(x) == 1 else x
         return x
 
     def _forward(self, batch_inputs: Tensor,
@@ -174,10 +159,17 @@ class TwoStageDetector(BaseDetector):
             proposal_cfg = self.train_cfg.get('rpn_proposal',
                                               self.test_cfg.rpn)
             rpn_data_samples = copy.deepcopy(batch_data_samples)
-            # set cat_id of gt_labels to 0 in RPN
-            for data_sample in rpn_data_samples:
-                data_sample.gt_instances.labels = \
-                    torch.zeros_like(data_sample.gt_instances.labels)
+        for i, data_sample in enumerate(rpn_data_samples):
+            if isinstance(data_sample, (tuple, list)):
+                # replace tuple/list with its last element (assuming it's the data sample)
+                rpn_data_samples[i] = data_sample[-1]
+
+            # Now safe to modify labels:
+            gt_instances = rpn_data_samples[i].gt_instances
+            if hasattr(gt_instances, 'labels'):
+                gt_instances.labels = torch.zeros_like(gt_instances.labels)
+            else:
+                gt_instances.labels = torch.tensor([], dtype=torch.long)
 
             rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
