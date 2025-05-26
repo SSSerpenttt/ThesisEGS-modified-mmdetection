@@ -6,7 +6,7 @@ from mmcv.ops import DeformConv2d
 from mmengine.config import ConfigDict
 from mmengine.structures import InstanceData
 from torch import Tensor
-from typing import Sequence, Tuple, List, Dict 
+from typing import Sequence, Tuple, List, Dict, Optional
 
 from mmdet.structures.bbox import HorizontalBoxes, BaseBoxes
 from mmdet.registry import MODELS, TASK_UTILS
