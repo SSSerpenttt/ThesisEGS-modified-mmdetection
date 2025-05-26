@@ -1,15 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-import argparse
-import os
-import os.path as osp
-
-from mmengine.config import Config, DictAction
-from mmengine.registry import RUNNERS
-from mmengine.runner import Runner
-
-from mmdet.utils import setup_cache_size_limit_of_dynamo
-
-import torch# Copyright (c) OpenMMLab. All rights reserved.
 import argparse
 import os
 import os.path as osp
@@ -26,14 +14,16 @@ torch.autograd.set_detect_anomaly(True)
 from mmengine.registry import TRANSFORMS
 import numpy as np
 
+from mmengine.structures import InstanceData
+from mmdet.structures import DetDataSample
+
 @TRANSFORMS.register_module()
 class EfficientNetPreprocessor:
     """Complete preprocessing pipeline for EfficientNet with batch dimension"""
     def __init__(self, size_divisor=32, mean=None, std=None, to_rgb=True):
         self.size_divisor = size_divisor
-        # Use EfficientNet's default normalization values if not specified
-        self.mean = torch.tensor(mean).view(3, 1, 1) if mean else torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        self.std = torch.tensor(std).view(3, 1, 1) if std else torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        self.mean = torch.tensor(mean).view(3, 1, 1) if mean else None
+        self.std = torch.tensor(std).view(3, 1, 1) if std else None
         self.to_rgb = to_rgb
         
     def __call__(self, results):
@@ -42,8 +32,8 @@ class EfficientNetPreprocessor:
         if isinstance(img, np.ndarray):
             img = np.ascontiguousarray(img)
         
-        # 2. Convert to tensor and normalize to [0,1] first
-        img = torch.from_numpy(img).float() / 255.0
+        # 2. Convert to tensor
+        img = torch.from_numpy(img).float()
         
         # 3. Handle channel order (RGB/BGR)
         if img.shape[2] == 3:  # HWC to CHW
@@ -52,7 +42,8 @@ class EfficientNetPreprocessor:
                 img = img[[2, 1, 0]]  # BGR to RGB
         
         # 4. Apply normalization
-        img = (img - self.mean) / self.std
+        if self.mean is not None and self.std is not None:
+            img = (img - self.mean) / self.std
         
         # 5. Padding
         h, w = img.shape[-2], img.shape[-1]
@@ -77,29 +68,46 @@ class BatchDimensionAdder:
 
 @TRANSFORMS.register_module()
 class TensorPackDetInputs:
-    """Modified PackDetInputs that maintains batch dimension"""
     def __init__(self, meta_keys=()):
         self.meta_keys = meta_keys
-        
+
     def __call__(self, results):
-        packed_results = dict()
-        
-        # Handle image data (must be 4D tensor)
+        packed_results = {}
+
+        # --- Pack image ---
         if 'img' in results:
             img = results['img']
             if not isinstance(img, torch.Tensor):
                 img = torch.from_numpy(np.ascontiguousarray(img))
-            if img.ndim == 3:
-                img = img.unsqueeze(0)
             packed_results['inputs'] = img.contiguous()
-        
-        # Handle metadata
-        packed_results['data_samples'] = dict()
+
+        # --- Create DetDataSample ---
+        data_sample = DetDataSample()
+
+        if 'gt_instances' in results:
+            gt_instances = InstanceData()
+            for k, v in results['gt_instances'].items():
+                if not isinstance(v, torch.Tensor):
+                    v = torch.from_numpy(np.array(v))
+                setattr(gt_instances, k, v)
+            # Ensure labels attribute exists even if missing
+            if not hasattr(gt_instances, 'labels'):
+                gt_instances.labels = torch.tensor([], dtype=torch.long)
+        else:
+            gt_instances = InstanceData()
+            gt_instances.labels = torch.tensor([], dtype=torch.long)
+
+        data_sample.gt_instances = gt_instances
+
+        # --- Pack metainfo ---
         for key in self.meta_keys:
             if key in results:
-                packed_results['data_samples'][key] = results[key]
-        
+                data_sample.set_metainfo({key: results[key]})
+
+        # --- Final packing ---
+        packed_results['data_samples'] = [data_sample]  # Must be list, not tuple!
         return packed_results
+
 
 @TRANSFORMS.register_module()
 class DebugInput:
