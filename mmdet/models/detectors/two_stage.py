@@ -97,19 +97,27 @@ class TwoStageDetector(BaseDetector):
         """bool: whether the detector has a RoI head"""
         return hasattr(self, 'roi_head') and self.roi_head is not None
 
-    def extract_feat(self, batch_inputs: Tensor) -> Tuple[Tensor]:
-        """Extract features.
-
-        Args:
-            batch_inputs (Tensor): Image tensor with shape (N, C, H ,W).
-
-        Returns:
-            tuple[Tensor]: Multi-level features that may have
-            different resolutions.
-        """
+    def extract_feat(self, batch_inputs):
+        """Extract features from images."""
         x = self.backbone(batch_inputs)
+        
+        # Debug print to verify backbone output
+        print(f"Backbone features: {[f.shape for f in x]}")
+        
+        # Process through neck if exists
         if self.with_neck:
-            x = self.neck(x)
+            if isinstance(x, (list, tuple)):
+                x = self.neck(x)
+            else:
+                x = self.neck([x])
+        
+        # Debug print to verify neck output
+        if self.with_neck:
+            print(f"Neck features: {[f.shape for f in x] if isinstance(x, (list, tuple)) else x.shape}")
+        
+        # Return features in format expected by heads
+        if isinstance(x, (list, tuple)):
+            return x[0] if len(x) == 1 else x
         return x
 
     def _forward(self, batch_inputs: Tensor,
