@@ -120,83 +120,72 @@ class RepPointsRPNHead(AnchorFreeHead):
             self.moment_mul = moment_mul
 
     def get_targets(self,
-                   points: List[Tensor],
-                   batch_gt_instances: InstanceList,
-                   batch_img_metas: List[dict],
-                   batch_gt_instances_ignore: OptInstanceList = None,
-                   stage: str = 'init',
-                   return_sampling_results: bool = False) -> tuple:
-        """Compute regression and classification targets for points.
+                    points: List[List[Tensor]],
+                    batch_gt_instances: InstanceList,
+                    batch_img_metas: List[dict],
+                    batch_gt_instances_ignore: OptInstanceList = None,
+                    stage: str = 'init',
+                    return_sampling_results: bool = False) -> tuple:
         
-        Args:
-            points (list[Tensor]): Points of each fpn level, each has shape
-                (num_points, 2).
-            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
-            batch_img_metas (list[dict]): Meta info of each image.
-            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
-                Batch of instances to be ignored.
-            stage (str): 'init' or 'refine'. Default: 'init'
-            return_sampling_results (bool): Whether to return sampling results.
+        """Compute regression and classification targets for points."""
         
-        Returns:
-            tuple:
-                - labels_list (list[Tensor]): Labels of each level.
-                - label_weights_list (list[Tensor]): Label weights of each level.
-                - bbox_gt_list (list[Tensor]): Ground truth bboxes of each level.
-                - candidate_list (list[Tensor]): Candidates of each level.
-                - bbox_weights_list (list[Tensor]): Bbox weights of each level.
-                - avg_factor (int): Average factor that is used to average the loss.
-        """
-        # Convert points to proposals format expected by get_targets
+        # Convert points to proposals format expected by parent get_targets
         proposals_list = []
         valid_flag_list = []
+        
         for img_id, img_meta in enumerate(batch_img_metas):
             proposals = []
             valid_flags = []
-            for i, points_per_level in enumerate(points):
+            
+            for i, points_per_level in enumerate(points[img_id]):
+                # Ensure points_per_level is a Tensor
+                if isinstance(points_per_level, (list, tuple)):
+                    points_per_level = torch.stack(points_per_level)
+                    
                 proposals.append(points_per_level)
                 valid_flags.append(
                     torch.ones((points_per_level.shape[0],),
-                    dtype=torch.bool,
-                    device=points_per_level.device))
+                              dtype=torch.bool,
+                              device=points_per_level.device))
+                
             proposals_list.append(proposals)
             valid_flag_list.append(valid_flags)
-    
-        # Call the existing get_targets implementation
-        return self.get_targets(
-            proposals_list=proposals_list,
-            valid_flag_list=valid_flag_list,
+
+        # Call the parent method with the correct parameters
+        return super().get_targets(
+            points=points,
             batch_gt_instances=batch_gt_instances,
-            batch_img_metas=batch_img_metas,
             batch_gt_instances_ignore=batch_gt_instances_ignore,
-            stage=stage,
-            return_sampling_results=return_sampling_results)
+            return_sampling_results=return_sampling_results
+        )
 
     def loss_by_feat(self,
                     cls_scores: List[Tensor],
                     pts_preds_init: List[Tensor],
                     pts_preds_refine: List[Tensor],
-                    gt_bboxes: List[Tensor],
-                    gt_labels: List[Tensor],
-                    img_metas: List[dict],
-                    gt_bboxes_ignore: Optional[List[Tensor]] = None) -> dict:
-        # Convert gt_bboxes + gt_labels into batch_gt_instances
-        batch_gt_instances = []
-        for bboxes, labels in zip(gt_bboxes, gt_labels):
-            instance = InstanceData()
-            instance.bboxes = bboxes
-            instance.labels = labels
-            batch_gt_instances.append(instance)
-
-        # Optional ignore
-        batch_gt_instances_ignore = []
-        if gt_bboxes_ignore is not None:
-            for ignore in gt_bboxes_ignore:
-                instance = InstanceData()
-                instance.bboxes = ignore
-                batch_gt_instances_ignore.append(instance)
-        else:
-            batch_gt_instances_ignore = None
+                    batch_gt_instances: InstanceList,
+                    batch_img_metas: List[dict],
+                    batch_gt_instances_ignore: Optional[List[Tensor]] = None) -> dict:
+        """Calculate loss based on features.
+        
+        Args:
+            cls_scores (list[Tensor]): Classification scores for each level.
+            pts_preds_init (list[Tensor]): Initial points predictions.
+            pts_preds_refine (list[Tensor]): Refined points predictions.
+            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
+            batch_img_metas (list[dict]): Meta info of each image.
+            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
+                Batch of instances to be ignored.
+                
+        Returns:
+            dict: Dictionary of loss components.
+        """
+        # Convert batch_img_metas to the expected format
+        img_metas = [{
+            'img_shape': meta['img_shape'],
+            'scale_factor': meta['scale_factor'],
+            'batch_input_shape': meta['img_shape']  # Add this if needed
+        } for meta in batch_img_metas]
 
         return self.loss(
             cls_scores,
@@ -204,7 +193,8 @@ class RepPointsRPNHead(AnchorFreeHead):
             pts_preds_refine,
             batch_gt_instances,
             img_metas,
-            batch_gt_instances_ignore)
+            batch_gt_instances_ignore=batch_gt_instances_ignore)
+
 
     
     def _init_layers(self) -> None:
@@ -420,71 +410,96 @@ class RepPointsRPNHead(AnchorFreeHead):
         
         return grid_yx, regressed_bbox
 
-    def loss(self, cls_scores: List[Tensor], pts_preds_init: List[Tensor],
-             pts_preds_refine: List[Tensor], batch_gt_instances: InstanceList,
-             batch_img_metas: List[dict], batch_gt_instances_ignore: OptInstanceList = None) -> dict:
-        """Calculate the loss based on the features extracted by the RPN head.
-        
+    def get_points(self, featmap_sizes, img_metas_dict, device='cuda'):
+        """Get points for all levels in a feature pyramid.
+
         Args:
-            cls_scores (list[Tensor]): Classification scores for each level.
-            pts_preds_init (list[Tensor]): Initial points predictions.
-            pts_preds_refine (list[Tensor]): Refined points predictions.
-            batch_gt_instances (list[:obj:`InstanceData`]): Batch of GT instances.
-            batch_img_metas (list[dict]): Meta info of each image.
-            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional): 
-                Batch of instances to be ignored.
-                
+            featmap_sizes (list[tuple]): List of feature map sizes (h, w).
+            img_metas (list[dict]): Image meta info.
+            device (str): Device.
+
         Returns:
-            dict[str, Tensor]: A dictionary of loss components.
+            tuple: (mlvl_center_list, mlvl_valid_flag_list)
         """
-        # Get featmap sizes
+        mlvl_center_list = []
+        mlvl_valid_flag_list = []
+
+        print("img_metas:", img_metas_dict)
+
+        if img_metas_dict is None or len(img_metas_dict) == 0:
+            raise ValueError(f"img_metas is {img_metas_dict}. Check if DetDataSample.metainfo was properly set.")
+        for i, meta in enumerate(img_metas_dict):
+            if 'img_shape' not in meta:
+                raise ValueError(f"Missing 'img_shape' in img_meta[{i}]: {meta}")
+
+
+        for featmap_size, stride in zip(featmap_sizes, self.point_strides):
+            h, w = featmap_size
+            # Create mesh grid
+            y, x = torch.meshgrid(
+                torch.arange(h, dtype=torch.float32, device=device),
+                torch.arange(w, dtype=torch.float32, device=device),
+                indexing='ij'
+            )
+            x = x * stride + stride // 2
+            y = y * stride + stride // 2
+            points = torch.stack((x, y), dim=-1).view(-1, 2)
+
+            # Repeat for each image in the batch
+            center_list = [points.clone() for _ in range(len(img_metas_dict))]
+            mlvl_center_list.append(center_list)
+
+            # Valid flags: whether each point lies within the image
+            valid_flag_list = []
+            for img_meta in img_metas_dict:
+                img_h, img_w = img_meta['img_shape'][:2]
+                valid_x = ((points[:, 0] >= 0) & (points[:, 0] < img_w))
+                valid_y = ((points[:, 1] >= 0) & (points[:, 1] < img_h))
+                valid = valid_x & valid_y
+                valid_flag_list.append(valid)
+            mlvl_valid_flag_list.append(valid_flag_list)
+
+        # Transpose the lists to match structure: list_per_image[level]
+        center_list = list(zip(*mlvl_center_list))  # list[num_imgs][num_levels]
+        valid_flag_list = list(zip(*mlvl_valid_flag_list))
+
+        return center_list, valid_flag_list
+
+    def loss(self, cls_scores: List[Tensor], pts_preds_init: List[Tensor],
+            pts_preds_refine: List[Tensor], batch_gt_instances: InstanceList,
+            img_metas_dict, batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         device = cls_scores[0].device
-        
-        # Target for initial stage
-        center_list, valid_flag_list = self.get_points(
-            featmap_sizes, batch_img_metas, device)
-        
-        # For RPN, we use the PointAssigner
+
+        # Get point centers
+        center_list, _ = self.get_points(featmap_sizes, img_metas_dict, device)
+
+        # Init targets - don't pass batch_img_metas to get_targets
         cls_reg_targets_init = self.get_targets(
-            proposals_list=center_list,
-            valid_flag_list=valid_flag_list,
+            points=center_list,
             batch_gt_instances=batch_gt_instances,
-            batch_img_metas=batch_img_metas,
+            batch_img_metas=img_metas_dict,  # This is used internally but not passed to parent
             batch_gt_instances_ignore=batch_gt_instances_ignore,
             stage='init',
             return_sampling_results=False)
-        
+
         (*_, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
-         avg_factor_init) = cls_reg_targets_init
-        
-        # Target for refinement stage
-        center_list, valid_flag_list = self.get_points(
-            featmap_sizes, batch_img_metas, device)
-        
-        bbox_list = []
-        for i_img, center in enumerate(center_list):
-            bbox = []
-            for i_lvl in range(len(pts_preds_refine)):
-                bbox_preds_init = self.points2bbox(pts_preds_init[i_lvl].detach())
-                bbox_shift = bbox_preds_init * self.point_strides[i_lvl]
-                bbox_center = torch.cat([center[i_lvl][:, :2], center[i_lvl][:, :2]], dim=1)
-                bbox.append(bbox_center + bbox_shift[i_img].permute(1, 2, 0).reshape(-1, 4))
-            bbox_list.append(bbox)
-            
+        avg_factor_init) = cls_reg_targets_init
+
+        # Refine targets
         cls_reg_targets_refine = self.get_targets(
-            proposals_list=bbox_list,
-            valid_flag_list=valid_flag_list,
+            points=center_list,
             batch_gt_instances=batch_gt_instances,
-            batch_img_metas=batch_img_metas,
+            batch_img_metas=img_metas_dict,  # This is used internally but not passed to parent
             batch_gt_instances_ignore=batch_gt_instances_ignore,
             stage='refine',
             return_sampling_results=False)
-        
+
         (labels_list, label_weights_list, bbox_gt_list_refine,
-         candidate_list_refine, bbox_weights_list_refine,
-         avg_factor_refine) = cls_reg_targets_refine
-        
+        candidate_list_refine, bbox_weights_list_refine,
+        avg_factor_refine) = cls_reg_targets_refine
+
         # Compute losses
         losses_cls, losses_pts_init, losses_pts_refine = multi_apply(
             self.loss_single,
@@ -500,11 +515,12 @@ class RepPointsRPNHead(AnchorFreeHead):
             self.point_strides,
             avg_factor_init=avg_factor_init,
             avg_factor_refine=avg_factor_refine)
-        
+
         return dict(
             loss_rpn_cls=losses_cls,
             loss_rpn_pts_init=losses_pts_init,
             loss_rpn_pts_refine=losses_pts_refine)
+
 
     def loss_single(self, cls_score: Tensor, pts_pred_init: Tensor,
                     pts_pred_refine: Tensor, labels: Tensor, label_weights,
