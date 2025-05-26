@@ -400,6 +400,9 @@ class EfficientNet(BaseModule):
             if i in self.out_indices:
                 outs.append(x)
 
+        print(f"Backbone output shapes: {[f.shape for f in outs]}")
+        
+        # Always return a tuple of features
         return tuple(outs)
 
     def _freeze_stages(self):
