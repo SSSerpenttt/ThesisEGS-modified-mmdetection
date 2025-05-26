@@ -54,6 +54,7 @@ class EfficientNetPreprocessor:
         
         # 6. Store processed image (ensure contiguous)
         results['img'] = img.contiguous()
+        results['img_shape'] = (img.shape[-2], img.shape[-1])
         return results
 
 @TRANSFORMS.register_module()
@@ -67,11 +68,21 @@ class BatchDimensionAdder:
         return results
 
 @TRANSFORMS.register_module()
+class MetaInfoAdder:
+    def __call__(self, results):
+        if 'img_info' in results:
+            results['img_id'] = results['img_info'].get('id', None)
+            results['ori_shape'] = results['img_info'].get('ori_shape', None)
+            results['scale_factor'] = results.get('scale_factor', None)
+        return results
+
+@TRANSFORMS.register_module()
 class TensorPackDetInputs:
     def __init__(self, meta_keys=()):
         self.meta_keys = meta_keys
 
     def __call__(self, results):
+        print("Keys in results before packing:", results.keys())
         packed_results = {}
 
         # --- Pack image ---
@@ -93,19 +104,32 @@ class TensorPackDetInputs:
             # Ensure labels attribute exists even if missing
             if not hasattr(gt_instances, 'labels'):
                 gt_instances.labels = torch.tensor([], dtype=torch.long)
+            # Ensure bboxes attribute exists even if missing
+            if not hasattr(gt_instances, 'bboxes'):
+                gt_instances.bboxes = torch.empty((0, 4))  # shape (0,4) for empty bounding boxes
         else:
             gt_instances = InstanceData()
             gt_instances.labels = torch.tensor([], dtype=torch.long)
+            gt_instances.bboxes = torch.empty((0, 4))
 
         data_sample.gt_instances = gt_instances
 
         # --- Pack metainfo ---
+        meta_dict = {}
         for key in self.meta_keys:
             if key in results:
-                data_sample.set_metainfo({key: results[key]})
+                meta_dict[key] = results[key]
+        data_sample.set_metainfo(meta_dict)
 
         # --- Final packing ---
         packed_results['data_samples'] = [data_sample]  # Must be list, not tuple!
+
+        for key in self.meta_keys:
+          if key not in results:
+              print(f"[Warning] Missing meta key: {key}")
+
+        print("Packed DetDataSample metainfo:", data_sample.metainfo)
+
         return packed_results
 
 
@@ -115,6 +139,8 @@ class DebugInput:
         img = results['img']
         print(f"Final input - Shape: {img.shape}")
         print(f"Channel means: {img.mean(dim=[1,2])}")
+        print(f"Keys in results: {list(results.keys())}")
+        print(f"Meta info preview: {[k for k in ['img_id', 'img_shape', 'ori_shape', 'scale_factor'] if k in results]}")
         return results
 
 def parse_args():
