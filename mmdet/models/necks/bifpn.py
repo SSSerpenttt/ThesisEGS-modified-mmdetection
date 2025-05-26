@@ -154,6 +154,8 @@ class BiFPN(nn.Module):
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
 
+        print(f"Neck output shapes: {[f.shape for f in outs]}")
+
         return tuple(outs)
 
 
@@ -263,5 +265,6 @@ class BiFPNModule(nn.Module):
             fused = (bu_features[-1] + F.max_pool2d(bu_features[-2], kernel_size=2)) / 2
         
         bu_features[-1] = self.bifpn_convs[conv_idx](fused)
+
 
         return bu_features
