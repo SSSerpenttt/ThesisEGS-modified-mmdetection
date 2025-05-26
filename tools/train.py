@@ -28,11 +28,12 @@ import numpy as np
 
 @TRANSFORMS.register_module()
 class EfficientNetPreprocessor:
-    """Complete preprocessing for EfficientNet compatibility"""
+    """Complete preprocessing pipeline for EfficientNet with batch dimension"""
     def __init__(self, size_divisor=32, mean=None, std=None, to_rgb=True):
         self.size_divisor = size_divisor
-        self.mean = torch.tensor(mean).view(3, 1, 1) if mean else None
-        self.std = torch.tensor(std).view(3, 1, 1) if std else None
+        # Use EfficientNet's default normalization values if not specified
+        self.mean = torch.tensor(mean).view(3, 1, 1) if mean else torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        self.std = torch.tensor(std).view(3, 1, 1) if std else torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
         self.to_rgb = to_rgb
         
     def __call__(self, results):
@@ -41,8 +42,8 @@ class EfficientNetPreprocessor:
         if isinstance(img, np.ndarray):
             img = np.ascontiguousarray(img)
         
-        # 2. Convert to tensor and normalize
-        img = torch.from_numpy(img).float()
+        # 2. Convert to tensor and normalize to [0,1] first
+        img = torch.from_numpy(img).float() / 255.0
         
         # 3. Handle channel order (RGB/BGR)
         if img.shape[2] == 3:  # HWC to CHW
@@ -51,8 +52,7 @@ class EfficientNetPreprocessor:
                 img = img[[2, 1, 0]]  # BGR to RGB
         
         # 4. Apply normalization
-        if self.mean is not None and self.std is not None:
-            img = (img - self.mean) / self.std
+        img = (img - self.mean) / self.std
         
         # 5. Padding
         h, w = img.shape[-2], img.shape[-1]
@@ -61,17 +61,53 @@ class EfficientNetPreprocessor:
         if pad_h > 0 or pad_w > 0:
             img = torch.nn.functional.pad(img, (0, pad_w, 0, pad_h), value=0)
         
-        # 6. Store processed image
-        results['img'] = img
+        # 6. Store processed image (ensure contiguous)
+        results['img'] = img.contiguous()
         return results
 
-# @TRANSFORMS.register_module()
-# class DebugInput:
-#     def __call__(self, results):
-#         img = results['img']
-#         print(f"Final input - Shape: {img.shape}")
-#         print(f"Channel means: {img.mean(dim=[1,2])}")
-#         return results
+@TRANSFORMS.register_module()
+class BatchDimensionAdder:
+    """Adds batch dimension to the tensor"""
+    def __call__(self, results):
+        if 'img' in results and isinstance(results['img'], torch.Tensor):
+            # Add batch dimension if not already present
+            if results['img'].ndim == 3:
+                results['img'] = results['img'].unsqueeze(0)
+        return results
+
+@TRANSFORMS.register_module()
+class TensorPackDetInputs:
+    """Modified PackDetInputs that maintains batch dimension"""
+    def __init__(self, meta_keys=()):
+        self.meta_keys = meta_keys
+        
+    def __call__(self, results):
+        packed_results = dict()
+        
+        # Handle image data (must be 4D tensor)
+        if 'img' in results:
+            img = results['img']
+            if not isinstance(img, torch.Tensor):
+                img = torch.from_numpy(np.ascontiguousarray(img))
+            if img.ndim == 3:
+                img = img.unsqueeze(0)
+            packed_results['inputs'] = img.contiguous()
+        
+        # Handle metadata
+        packed_results['data_samples'] = dict()
+        for key in self.meta_keys:
+            if key in results:
+                packed_results['data_samples'][key] = results[key]
+        
+        return packed_results
+
+@TRANSFORMS.register_module()
+class DebugInput:
+    def __call__(self, results):
+        img = results['img']
+        print(f"Final input - Shape: {img.shape}")
+        print(f"Channel means: {img.mean(dim=[1,2])}")
+        return results
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
