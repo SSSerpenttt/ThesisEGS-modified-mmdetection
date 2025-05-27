@@ -227,6 +227,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_gt_list.append(bbox_gt[start_idx:end_idx])
             bbox_weights_list.append(bbox_weights[start_idx:end_idx])
             start_idx = end_idx
+
+        print(f"Number of positive samples: {len(pos_inds)}")
+        print(f"Number of negative samples: {len(neg_inds)}")
         
         return (labels_list, label_weights_list, bbox_gt_list, 
                 points, bbox_weights_list, len(pos_inds))
@@ -409,7 +412,20 @@ class RepPointsRPNHead(AnchorFreeHead):
         Returns:
             Tensor: Bounding boxes, shape (N, H, W, 4).
         """
+        # Add debug prints
+        print(f"Input pts shape: {pts.shape}")
+        
+        # Handle different input dimensions
+        if pts.dim() == 2:
+            # If input is (N, num_points*2), reshape to (N, num_points*2, 1, 1)
+            pts = pts.view(pts.shape[0], pts.shape[1], 1, 1)
+        elif pts.dim() == 3:
+            # If input is (N, num_points*2, L), reshape to (N, num_points*2, L, 1)
+            pts = pts.unsqueeze(-1)
+        
         pts_reshape = pts.view(pts.shape[0], -1, 2, *pts.shape[2:])
+        print(f"Reshaped pts shape: {pts_reshape.shape}")
+        
         pts_y = pts_reshape[:, :, 0, ...] if y_first else pts_reshape[:, :, 1, ...]
         pts_x = pts_reshape[:, :, 1, ...] if y_first else pts_reshape[:, :, 0, ...]
         
@@ -445,14 +461,23 @@ class RepPointsRPNHead(AnchorFreeHead):
         else:
             raise NotImplementedError
         
+        print(f"Raw bbox shape: {bbox.shape}")
+        
         # Reshape to (N, H, W, 4) format
         if bbox.dim() == 4:  # Already has 4 dimensions (N, 4, H, W)
             bbox = bbox.permute(0, 2, 3, 1).contiguous()
-        elif bbox.dim() == 3:  # Shape is (N, 4, H*W)
-            bbox = bbox.permute(0, 2, 1).contiguous().view(bbox.size(0), -1, 4)
+        elif bbox.dim() == 3:  # Shape is (N, 4, L)
+            bbox = bbox.permute(0, 2, 1).contiguous()
+            if bbox.shape[-1] != 4:  # Ensure last dim is 4
+                bbox = bbox.view(bbox.size(0), -1, 4)
         else:
-            raise ValueError(f"Unexpected bbox dimension: {bbox.dim()}")
+            # For 2D input (N,4), add dummy dimensions
+            if bbox.shape[-1] == 4:
+                bbox = bbox.unsqueeze(1).unsqueeze(1)  # (N,1,1,4)
+            else:
+                raise ValueError(f"Final bbox shape {bbox.shape} is invalid")
         
+        print(f"Final bbox shape: {bbox.shape}")
         return bbox
 
     def gen_grid_from_reg(self, reg: Tensor, previous_boxes: Tensor) -> Tuple[Tensor]:
@@ -606,36 +631,52 @@ class RepPointsRPNHead(AnchorFreeHead):
                     bbox_gt_refine: List[Tensor], bbox_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int) -> Tuple[Tensor]:
         """Calculate the loss of a single scale level."""
-        # Classification loss
-        # Reshape cls_score to (N, C, H, W) -> (N*H*W, C)
+        # Classification loss (unchanged)
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-        
-        # Reshape labels and weights to match
         labels = torch.cat(labels, dim=0).reshape(-1)
         label_weights = torch.cat(label_weights, dim=0).reshape(-1)
         
-        # Only compute loss for valid points
-        valid_idx = label_weights > 0
-        cls_score = cls_score[valid_idx]
-        labels = labels[valid_idx]
-        label_weights = label_weights[valid_idx]
+        valid_idx = (label_weights > 0).nonzero().squeeze(1)
         
-        if cls_score.numel() > 0:
+        if len(valid_idx) > 0:
+            cls_score = cls_score[valid_idx]
+            labels = labels[valid_idx]
+            label_weights = label_weights[valid_idx]
             loss_cls = self.loss_cls(
-                cls_score, labels, label_weights, avg_factor=avg_factor_refine)
+                cls_score, labels, label_weights, 
+                avg_factor=float(avg_factor_refine))
         else:
-            loss_cls = cls_score.sum() * 0  # return zero loss if no valid points
+            loss_cls = cls_score.sum() * 0
 
-        # Points loss (unchanged)
-        bbox_gt_init = torch.cat(bbox_gt_init, dim=0).reshape(-1, 4)
-        bbox_weights_init = torch.cat(bbox_weights_init, dim=0).reshape(-1, 4)
-        bbox_pred_init = self.points2bbox(
-            pts_pred_init.reshape(-1, 4 * self.num_points), y_first=False)
+        # Points loss - modified shape handling
+        bbox_gt_init = torch.cat(bbox_gt_init, dim=0)
+        bbox_weights_init = torch.cat(bbox_weights_init, dim=0)
         
-        bbox_gt_refine = torch.cat(bbox_gt_refine, dim=0).reshape(-1, 4)
-        bbox_weights_refine = torch.cat(bbox_weights_refine, dim=0).reshape(-1, 4)
-        bbox_pred_refine = self.points2bbox(
-            pts_pred_refine.reshape(-1, 4 * self.num_points), y_first=False)
+        # Convert points to bboxes with proper reshaping
+        pts_pred_init = pts_pred_init.permute(0, 2, 3, 1).reshape(-1, 4 * self.num_points)
+        print(f"pts_pred_init shape before points2bbox: {pts_pred_init.shape}")
+        bbox_pred_init = self.points2bbox(pts_pred_init, y_first=False)
+        
+        # Ensure shapes match before loss calculation
+        if bbox_pred_init.dim() == 4:  # (N, H, W, 4)
+            bbox_pred_init = bbox_pred_init.view(-1, 4)
+        if bbox_gt_init.dim() == 3:
+            bbox_gt_init = bbox_gt_init.view(-1, 4)
+        if bbox_weights_init.dim() == 3:
+            bbox_weights_init = bbox_weights_init.view(-1, 4)
+        
+        # Same for refined points
+        bbox_gt_refine = torch.cat(bbox_gt_refine, dim=0)
+        bbox_weights_refine = torch.cat(bbox_weights_refine, dim=0)
+        pts_pred_refine = pts_pred_refine.permute(0, 2, 3, 1).reshape(-1, 4 * self.num_points)
+        bbox_pred_refine = self.points2bbox(pts_pred_refine, y_first=False)
+        
+        if bbox_pred_refine.dim() == 4:
+            bbox_pred_refine = bbox_pred_refine.view(-1, 4)
+        if bbox_gt_refine.dim() == 3:
+            bbox_gt_refine = bbox_gt_refine.view(-1, 4)
+        if bbox_weights_refine.dim() == 3:
+            bbox_weights_refine = bbox_weights_refine.view(-1, 4)
         
         normalize_term = self.point_base_scale * stride
         
@@ -643,13 +684,13 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_pred_init / normalize_term,
             bbox_gt_init / normalize_term,
             bbox_weights_init,
-            avg_factor=avg_factor_init)
+            avg_factor=float(avg_factor_init))
         
         loss_pts_refine = self.loss_bbox_refine(
             bbox_pred_refine / normalize_term,
             bbox_gt_refine / normalize_term,
             bbox_weights_refine,
-            avg_factor=avg_factor_refine)
+            avg_factor=float(avg_factor_refine))
         
         return loss_cls, loss_pts_init, loss_pts_refine
 
