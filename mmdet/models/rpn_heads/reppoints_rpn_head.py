@@ -178,11 +178,22 @@ class RepPointsRPNHead(AnchorFreeHead):
         bboxes = []
         for points_per_level in points:
             bboxes_per_level = self.points2bbox(points_per_level.unsqueeze(0))
+            # Ensure bboxes have shape (N, 4)
+            if bboxes_per_level.dim() == 4:
+                bboxes_per_level = bboxes_per_level.view(-1, 4)
             bboxes.append(bboxes_per_level.squeeze(0))
         bboxes = torch.cat(bboxes, dim=0)
 
         # Create InstanceData for predictions
         pred_instances = InstanceData(priors=bboxes)
+        
+        # Get ground truth boxes
+        gt_bboxes = gt_instances.bboxes
+        if gt_bboxes.dim() == 3:
+            gt_bboxes = gt_bboxes.squeeze(0)
+        
+        # Create InstanceData for ground truth
+        gt_instances = InstanceData(bboxes=gt_bboxes)
         
         # Assign targets
         assign_result = self.assigner.assign(
@@ -403,24 +414,14 @@ class RepPointsRPNHead(AnchorFreeHead):
             return cls_out, self.points2bbox(pts_out_refine)
 
     def points2bbox(self, pts: Tensor, y_first: bool = True) -> Tensor:
-        """Convert point set to bounding box.
-        
-        Args:
-            pts (Tensor): Point sets, shape (N, num_points*2, H, W).
-            y_first (bool): If y_first=True, point set is [y1, x1, y2, x2...].
-            
-        Returns:
-            Tensor: Bounding boxes, shape (N, H, W, 4).
-        """
+        """Convert point set to bounding box."""
         # Add debug prints
         print(f"Input pts shape: {pts.shape}")
         
         # Handle different input dimensions
         if pts.dim() == 2:
-            # If input is (N, num_points*2), reshape to (N, num_points*2, 1, 1)
-            pts = pts.view(pts.shape[0], pts.shape[1], 1, 1)
+            pts = pts.view(1, pts.shape[0], pts.shape[1], 1)
         elif pts.dim() == 3:
-            # If input is (N, num_points*2, L), reshape to (N, num_points*2, L, 1)
             pts = pts.unsqueeze(-1)
         
         pts_reshape = pts.view(pts.shape[0], -1, 2, *pts.shape[2:])
@@ -463,19 +464,16 @@ class RepPointsRPNHead(AnchorFreeHead):
         
         print(f"Raw bbox shape: {bbox.shape}")
         
-        # Reshape to (N, H, W, 4) format
-        if bbox.dim() == 4:  # Already has 4 dimensions (N, 4, H, W)
-            bbox = bbox.permute(0, 2, 3, 1).contiguous()
-        elif bbox.dim() == 3:  # Shape is (N, 4, L)
-            bbox = bbox.permute(0, 2, 1).contiguous()
-            if bbox.shape[-1] != 4:  # Ensure last dim is 4
-                bbox = bbox.view(bbox.size(0), -1, 4)
+        # Reshape to (N, 4)
+        if bbox.dim() == 4:
+            bbox = bbox.permute(0, 2, 3, 1).contiguous().view(-1, 4)
+        elif bbox.dim() == 3:
+            bbox = bbox.permute(0, 2, 1).contiguous().view(-1, 4)
+        elif bbox.dim() == 2:
+            if bbox.size(-1) != 4:
+                bbox = bbox.view(-1, 4)
         else:
-            # For 2D input (N,4), add dummy dimensions
-            if bbox.shape[-1] == 4:
-                bbox = bbox.unsqueeze(1).unsqueeze(1)  # (N,1,1,4)
-            else:
-                raise ValueError(f"Final bbox shape {bbox.shape} is invalid")
+            raise ValueError(f"Unexpected bbox dimension: {bbox.dim()}")
         
         print(f"Final bbox shape: {bbox.shape}")
         return bbox
@@ -631,7 +629,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                     bbox_gt_refine: List[Tensor], bbox_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int) -> Tuple[Tensor]:
         """Calculate the loss of a single scale level."""
-        # Classification loss (unchanged)
+        # Classification loss
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
         labels = torch.cat(labels, dim=0).reshape(-1)
         label_weights = torch.cat(label_weights, dim=0).reshape(-1)
@@ -648,35 +646,18 @@ class RepPointsRPNHead(AnchorFreeHead):
         else:
             loss_cls = cls_score.sum() * 0
 
-        # Points loss - modified shape handling
-        bbox_gt_init = torch.cat(bbox_gt_init, dim=0)
-        bbox_weights_init = torch.cat(bbox_weights_init, dim=0)
+        # Points loss - ensure proper shapes
+        bbox_gt_init = torch.cat([b.view(-1, 4) for b in bbox_gt_init], dim=0)
+        bbox_weights_init = torch.cat([b.view(-1, 4) for b in bbox_weights_init], dim=0)
         
-        # Convert points to bboxes with proper reshaping
         pts_pred_init = pts_pred_init.permute(0, 2, 3, 1).reshape(-1, 4 * self.num_points)
-        print(f"pts_pred_init shape before points2bbox: {pts_pred_init.shape}")
         bbox_pred_init = self.points2bbox(pts_pred_init, y_first=False)
         
-        # Ensure shapes match before loss calculation
-        if bbox_pred_init.dim() == 4:  # (N, H, W, 4)
-            bbox_pred_init = bbox_pred_init.view(-1, 4)
-        if bbox_gt_init.dim() == 3:
-            bbox_gt_init = bbox_gt_init.view(-1, 4)
-        if bbox_weights_init.dim() == 3:
-            bbox_weights_init = bbox_weights_init.view(-1, 4)
-        
         # Same for refined points
-        bbox_gt_refine = torch.cat(bbox_gt_refine, dim=0)
-        bbox_weights_refine = torch.cat(bbox_weights_refine, dim=0)
+        bbox_gt_refine = torch.cat([b.view(-1, 4) for b in bbox_gt_refine], dim=0)
+        bbox_weights_refine = torch.cat([b.view(-1, 4) for b in bbox_weights_refine], dim=0)
         pts_pred_refine = pts_pred_refine.permute(0, 2, 3, 1).reshape(-1, 4 * self.num_points)
         bbox_pred_refine = self.points2bbox(pts_pred_refine, y_first=False)
-        
-        if bbox_pred_refine.dim() == 4:
-            bbox_pred_refine = bbox_pred_refine.view(-1, 4)
-        if bbox_gt_refine.dim() == 3:
-            bbox_gt_refine = bbox_gt_refine.view(-1, 4)
-        if bbox_weights_refine.dim() == 3:
-            bbox_weights_refine = bbox_weights_refine.view(-1, 4)
         
         normalize_term = self.point_base_scale * stride
         
