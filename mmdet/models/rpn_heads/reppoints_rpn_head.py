@@ -610,38 +610,35 @@ class RepPointsRPNHead(AnchorFreeHead):
     def loss(self, cls_scores: List[Tensor], pts_preds_init: List[Tensor],
             pts_preds_refine: List[Tensor], batch_gt_instances: InstanceList,
             img_metas_dict, batch_gt_instances_ignore: OptInstanceList = None) -> dict:
-
+        
+        """Calculate the loss."""
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         device = cls_scores[0].device
-
+    
         # Get point centers
         center_list, _ = self.get_points(featmap_sizes, img_metas_dict, device)
-
-        # Init targets - don't pass batch_img_metas to get_targets
-        cls_reg_targets_init = self.get_targets(
+    
+        # Get targets - make sure we're unpacking the tuple correctly
+        (labels_list, label_weights_list, 
+         bbox_gt_list_init, candidate_list_init, 
+         bbox_weights_list_init, avg_factor_init) = self.get_targets(
             points=center_list,
             batch_gt_instances=batch_gt_instances,
-            batch_img_metas=img_metas_dict,  # This is used internally but not passed to parent
+            batch_img_metas=img_metas_dict,
             batch_gt_instances_ignore=batch_gt_instances_ignore,
             stage='init',
             return_sampling_results=False)
-
-        (*_, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
-        avg_factor_init) = cls_reg_targets_init
-
-        # Refine targets
-        cls_reg_targets_refine = self.get_targets(
+    
+        (_, _, 
+         bbox_gt_list_refine, _, 
+         bbox_weights_list_refine, avg_factor_refine) = self.get_targets(
             points=center_list,
             batch_gt_instances=batch_gt_instances,
-            batch_img_metas=img_metas_dict,  # This is used internally but not passed to parent
+            batch_img_metas=img_metas_dict,
             batch_gt_instances_ignore=batch_gt_instances_ignore,
             stage='refine',
             return_sampling_results=False)
-
-        (labels_list, label_weights_list, bbox_gt_list_refine,
-        candidate_list_refine, bbox_weights_list_refine,
-        avg_factor_refine) = cls_reg_targets_refine
-
+    
         # Compute losses
         losses_cls, losses_pts_init, losses_pts_refine = multi_apply(
             self.loss_single,
@@ -657,7 +654,7 @@ class RepPointsRPNHead(AnchorFreeHead):
             self.point_strides,
             avg_factor_init=avg_factor_init,
             avg_factor_refine=avg_factor_refine)
-
+    
         return dict(
             loss_rpn_cls=losses_cls,
             loss_rpn_pts_init=losses_pts_init,
@@ -665,14 +662,17 @@ class RepPointsRPNHead(AnchorFreeHead):
 
 
     def loss_single(self, cls_score: Tensor, pts_pred_init: Tensor,
-                    pts_pred_refine: Tensor, labels: Tensor, label_weights,
-                    bbox_gt_init: Tensor, bbox_weights_init: Tensor,
-                    bbox_gt_refine: Tensor, bbox_weights_refine: Tensor,
+                    pts_pred_refine: Tensor, labels: List[Tensor], label_weights: List[Tensor],
+                    bbox_gt_init: List[Tensor], bbox_weights_init: List[Tensor],
+                    bbox_gt_refine: List[Tensor], bbox_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int) -> Tuple[Tensor]:
+        
         """Calculate the loss of a single scale level."""
         # Classification loss
-        labels = labels.reshape(-1)
-        label_weights = label_weights.reshape(-1)
+        # Convert lists to tensors and reshape
+        labels = torch.cat(labels, dim=0).reshape(-1)
+        label_weights = torch.cat(label_weights, dim=0).reshape(-1)
+        
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
         cls_score = cls_score.contiguous()
         
@@ -680,13 +680,13 @@ class RepPointsRPNHead(AnchorFreeHead):
             cls_score, labels, label_weights, avg_factor=avg_factor_refine)
         
         # Points loss
-        bbox_gt_init = bbox_gt_init.reshape(-1, 4)
-        bbox_weights_init = bbox_weights_init.reshape(-1, 4)
+        bbox_gt_init = torch.cat(bbox_gt_init, dim=0).reshape(-1, 4)
+        bbox_weights_init = torch.cat(bbox_weights_init, dim=0).reshape(-1, 4)
         bbox_pred_init = self.points2bbox(
             pts_pred_init.reshape(-1, 4 * self.num_points), y_first=False)
         
-        bbox_gt_refine = bbox_gt_refine.reshape(-1, 4)
-        bbox_weights_refine = bbox_weights_refine.reshape(-1, 4)
+        bbox_gt_refine = torch.cat(bbox_gt_refine, dim=0).reshape(-1, 4)
+        bbox_weights_refine = torch.cat(bbox_weights_refine, dim=0).reshape(-1, 4)
         bbox_pred_refine = self.points2bbox(
             pts_pred_refine.reshape(-1, 4 * self.num_points), y_first=False)
         
