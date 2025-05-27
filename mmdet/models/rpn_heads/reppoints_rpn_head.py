@@ -6,7 +6,7 @@ from mmcv.ops import DeformConv2d
 from mmengine.config import ConfigDict
 from mmengine.structures import InstanceData
 from torch import Tensor
-from typing import Sequence, Tuple, List, Dict, Optional
+from typing import Sequence, Tuple, List, Dict, Optional, Union
 
 from mmdet.structures.bbox import HorizontalBoxes, BaseBoxes
 from mmdet.registry import MODELS, TASK_UTILS
@@ -70,15 +70,6 @@ class RepPointsRPNHead(AnchorFreeHead):
                          bias_prob=0.01)),
                  **kwargs) -> None:
         
-        self.assigner = TASK_UTILS.build(dict(type='mmdet.MaxIoUAssigner',
-                                     pos_iou_thr=0.7,
-                                     neg_iou_thr=0.3,
-                                     min_pos_iou=0.3,
-                                     ignore_iof_thr=-1,
-                                     match_low_quality=True,
-                                     iou_calculator=dict(type='mmdet.BboxOverlaps2D')))
-        self.sampler = PseudoSampler()  # Or another sampler if you prefer
-
         # RPN is binary classification (object vs background)
         self.num_points = num_points
         self.point_feat_channels = point_feat_channels
@@ -107,6 +98,15 @@ class RepPointsRPNHead(AnchorFreeHead):
             loss_cls=loss_cls,
             init_cfg=init_cfg,
             **kwargs)
+
+        self.assigner = TASK_UTILS.build(dict(type='mmdet.MaxIoUAssigner',
+                                     pos_iou_thr=0.7,
+                                     neg_iou_thr=0.3,
+                                     min_pos_iou=0.3,
+                                     ignore_iof_thr=-1,
+                                     match_low_quality=True,
+                                     iou_calculator=dict(type='mmdet.BboxOverlaps2D')))
+        self.sampler = PseudoSampler()  # Or another sampler if you prefer
         
         self._init_layers()
         
@@ -228,44 +228,49 @@ class RepPointsRPNHead(AnchorFreeHead):
                 bbox_weights_list, avg_factor)
 
     def _get_targets_single(self,
-                            flat_points: Tensor,
-                            valid_flags: Tensor,
-                            gt_bboxes: BaseBoxes,
-                            gt_labels: Tensor,
-                            gt_bboxes_ignore: Optional[BaseBoxes] = None,
-                            img_meta: dict = None,
-                            stage: str = 'init') -> tuple:
+                          flat_points: Tensor,
+                          valid_flags: Tensor,
+                          gt_bboxes: Union[Tensor, BaseBoxes],
+                          gt_labels: Tensor,
+                          gt_bboxes_ignore: Optional[Union[Tensor, BaseBoxes]] = None,
+                          img_meta: dict = None,
+                          stage: str = 'init') -> tuple:
         """Compute targets for a single image."""
+        # Convert inputs to proper format
         if not isinstance(gt_bboxes, BaseBoxes):
             gt_bboxes = HorizontalBoxes(gt_bboxes)
         
         if gt_bboxes_ignore is not None and not isinstance(gt_bboxes_ignore, BaseBoxes):
             gt_bboxes_ignore = HorizontalBoxes(gt_bboxes_ignore)
         
-        # Convert points to bboxes for assignment
-        point_bboxes = self.points2bbox(flat_points.unsqueeze(0)).squeeze(0)
+        # Convert points to bboxes with proper shape (N, 4)
+        point_bboxes = self.points2bbox(flat_points.unsqueeze(0))  # Add batch dim
+        point_bboxes = point_bboxes.view(-1, 4)  # Flatten to (N, 4)
         
-        # Convert HorizontalBoxes to tensor for assignment
-        gt_bboxes_tensor = gt_bboxes.tensor
+        # Create InstanceData objects
+        pred_instances = InstanceData(priors=point_bboxes)
+        gt_instances = InstanceData(bboxes=gt_bboxes, labels=gt_labels)
+        
         if gt_bboxes_ignore is not None:
-            gt_bboxes_ignore_tensor = gt_bboxes_ignore.tensor
+            gt_instances_ignore = InstanceData(bboxes=gt_bboxes_ignore)
         else:
-            gt_bboxes_ignore_tensor = None
+            gt_instances_ignore = None
         
-        # Assign targets - pass tensors instead of HorizontalBoxes objects
+        # Assign targets
         assign_result = self.assigner.assign(
-            point_bboxes,  # Converted to bboxes
-            gt_bboxes_tensor,
-            gt_bboxes_ignore_tensor)
+            pred_instances=pred_instances,
+            gt_instances=gt_instances,
+            gt_instances_ignore=gt_instances_ignore)
         
-        # Rest of your method remains the same...
-        sampling_result = self.sampler.sample(assign_result, point_bboxes, gt_bboxes_tensor)
+        # Sample the results
+        sampling_result = self.sampler.sample(
+            assign_result=assign_result,
+            pred_instances=pred_instances,
+            gt_instances=gt_instances)
         
         # Prepare targets
         num_valid_points = flat_points.shape[0]
-        labels = flat_points.new_full((num_valid_points,),
-                                    self.num_classes,
-                                    dtype=torch.long)
+        labels = flat_points.new_full((num_valid_points,), self.num_classes, dtype=torch.long)
         label_weights = flat_points.new_zeros(num_valid_points, dtype=torch.float)
         bbox_gt = flat_points.new_zeros((num_valid_points, 4), dtype=torch.float)
         bbox_weights = flat_points.new_zeros((num_valid_points, 4), dtype=torch.float)
@@ -274,16 +279,14 @@ class RepPointsRPNHead(AnchorFreeHead):
         neg_inds = sampling_result.neg_inds
         
         if len(pos_inds) > 0:
-            # RPN only has one class (object vs background)
-            labels[pos_inds] = 0
-            pos_bbox_gt = sampling_result.pos_gt_bboxes
+            labels[pos_inds] = 0  # RPN binary classification
+            pos_bbox_gt = sampling_result.pos_gt_bboxes.tensor
             bbox_gt[pos_inds, :] = pos_bbox_gt
             bbox_weights[pos_inds, :] = 1.0
         
         if len(neg_inds) > 0:
             label_weights[neg_inds] = 1.0
         
-        # For RPN, all points should have some weight
         label_weights[valid_flags] = 1.0
         
         return (labels, label_weights, bbox_gt, flat_points, 
@@ -465,7 +468,7 @@ class RepPointsRPNHead(AnchorFreeHead):
             y_first (bool): If y_first=True, point set is [y1, x1, y2, x2...].
             
         Returns:
-            Tensor: Bounding boxes, shape (N, 4, H, W).
+            Tensor: Bounding boxes, shape (N, H, W, 4).
         """
         pts_reshape = pts.view(pts.shape[0], -1, 2, *pts.shape[2:])
         pts_y = pts_reshape[:, :, 0, ...] if y_first else pts_reshape[:, :, 1, ...]
@@ -502,6 +505,15 @@ class RepPointsRPNHead(AnchorFreeHead):
             ], dim=1)
         else:
             raise NotImplementedError
+        
+        # Reshape to (N, H, W, 4) format
+        if bbox.dim() == 4:  # Already has 4 dimensions (N, 4, H, W)
+            bbox = bbox.permute(0, 2, 3, 1).contiguous()
+        elif bbox.dim() == 3:  # Shape is (N, 4, H*W)
+            bbox = bbox.permute(0, 2, 1).contiguous().view(bbox.size(0), -1, 4)
+        else:
+            raise ValueError(f"Unexpected bbox dimension: {bbox.dim()}")
+        
         return bbox
 
     def gen_grid_from_reg(self, reg: Tensor, previous_boxes: Tensor) -> Tuple[Tensor]:
