@@ -1,3 +1,22 @@
+<h1>Packed Data Structure</h1>
+```
+results
+├── img : Tensor (3, H, W)
+├── img_shape : (H, W)
+├── ori_shape : (original_H, original_W)
+├── img_id : int
+├── scale_factor : np.array
+├── gt_instances
+│   ├── bboxes : np.array (N, 4)
+│   ├── labels : np.array (N,)
+│   └── masks : list of binary masks or polygons
+└── img_info
+    ├── id : int
+    └── ori_shape : (original_H, original_W)
+```
+
+<br /><br />
+
 <div align="center">
   <img src="resources/mmdet-logo.png" width="600"/>
   <div>&nbsp;</div>
