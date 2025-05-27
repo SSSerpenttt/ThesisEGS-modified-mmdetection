@@ -136,125 +136,53 @@ class RepPointsRPNHead(AnchorFreeHead):
                     batch_gt_instances_ignore: OptInstanceList = None,
                     stage: str = 'init',
                     return_sampling_results: bool = False) -> tuple:
-        """Compute regression and classification targets for points.
-        
-        Args:
-            points (list[list[Tensor]]): Points of each image, each has shape
-                (num_points, 2).
-            batch_gt_instances (list[:obj:`InstanceData`]): Batch of gt instances.
-            batch_img_metas (list[dict]): Meta info of each image.
-            batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
-                Batch of instances to be ignored.
-            stage (str): 'init' or 'refine'. Default: 'init'.
-            return_sampling_results (bool): Whether to return sampling results.
-                Default: False.
-                
-        Returns:
-            tuple:
-                - labels_list (list[Tensor]): Labels of each level.
-                - label_weights_list (list[Tensor]): Label weights of each level.
-                - bbox_gt_list (list[Tensor]): Ground truth bbox of each level.
-                - candidate_list (list[Tensor]): Candidate boxes of each level.
-                - bbox_weights_list (list[Tensor]): Bbox weights of each level.
-                - avg_factor (int): Average factor that is used to average the loss.
-        """
-        # Convert points to the format expected by the target assigner
-        # Each element in points is a list of points for each level
-        # We need to flatten them per image
-        flatten_points = []
-        flatten_valid_flags = []
-        for img_id, img_meta in enumerate(batch_img_metas):
-            multi_level_points = points[img_id]
-            multi_level_flags = []
-            for i, points_per_level in enumerate(multi_level_points):
-                # Ensure points_per_level is a Tensor
-                if isinstance(points_per_level, (list, tuple)):
-                    points_per_level = torch.stack(points_per_level)
-                multi_level_flags.append(
-                    torch.ones((points_per_level.shape[0],),
-                              dtype=torch.bool,
-                              device=points_per_level.device))
-            flatten_points.append(torch.cat(multi_level_points))
-            flatten_valid_flags.append(torch.cat(multi_level_flags))
-        
-        # Convert gt_instances to the format expected by the target assigner
-        gt_bboxes = []
-        gt_labels = []
-        for gt_inst in batch_gt_instances:
-            gt_bboxes.append(gt_inst.bboxes)
-            gt_labels.append(gt_inst.labels)
-        
-        # Convert ignore instances if provided
-        if batch_gt_instances_ignore is None:
-            batch_gt_instances_ignore = [None] * len(batch_img_metas)
-        
-        gt_bboxes_ignore = []
-        for gt_inst_ignore in batch_gt_instances_ignore:
-            if gt_inst_ignore is not None:
-                gt_bboxes_ignore.append(gt_inst_ignore.bboxes)
-            else:
-                gt_bboxes_ignore.append(None)
-        
-        # Assign targets for each image
-        (labels_list, label_weights_list, bbox_gt_list, candidate_list,
+        """Compute regression and classification targets for points."""
+        # Convert batch_img_metas to the expected format
+        img_metas = [{
+            'img_shape': meta['img_shape'],
+            'scale_factor': meta['scale_factor'],
+            'batch_input_shape': meta['img_shape']
+        } for meta in batch_img_metas]
+
+        # Get points for each level
+        num_levels = len(self.point_strides)
+        mlvl_points = []
+        for i in range(num_levels):
+            points_per_level = []
+            for img_id in range(len(batch_img_metas)):
+                points_per_level.append(points[img_id][i])
+            mlvl_points.append(points_per_level)
+
+        # Get targets for each image
+        (labels_list, label_weights_list, 
+        bbox_gt_list, candidate_list, 
         bbox_weights_list, avg_factor) = multi_apply(
             self._get_targets_single,
-            flatten_points,
-            flatten_valid_flags,
-            gt_bboxes,
-            gt_labels,
-            gt_bboxes_ignore,
+            mlvl_points,
+            batch_gt_instances,
             batch_img_metas,
+            batch_gt_instances_ignore,
             stage=stage)
-        
-        # Reshape to per-level lists
-        num_levels = len(self.point_strides)
-        labels_list = [labels.split(num_levels) for labels in labels_list]
-        label_weights_list = [label_weights.split(num_levels) 
-                            for label_weights in label_weights_list]
-        bbox_gt_list = [bbox_gt.split(num_levels) for bbox_gt in bbox_gt_list]
-        candidate_list = [candidate.split(num_levels) for candidate in candidate_list]
-        bbox_weights_list = [bbox_weights.split(num_levels) 
-                            for bbox_weights in bbox_weights_list]
-        
-        # Transpose to list per level
-        labels_list = list(zip(*labels_list))
-        label_weights_list = list(zip(*label_weights_list))
-        bbox_gt_list = list(zip(*bbox_gt_list))
-        candidate_list = list(zip(*candidate_list))
-        bbox_weights_list = list(zip(*bbox_weights_list))
-        
-        return (labels_list, label_weights_list, bbox_gt_list, candidate_list,
-                bbox_weights_list, avg_factor)
+
+        return (labels_list, label_weights_list, bbox_gt_list, 
+                candidate_list, bbox_weights_list, avg_factor)
 
     def _get_targets_single(self,
-                          flat_points: Tensor,
-                          valid_flags: Tensor,
-                          gt_bboxes: Union[Tensor, BaseBoxes],
-                          gt_labels: Tensor,
-                          gt_bboxes_ignore: Optional[Union[Tensor, BaseBoxes]] = None,
-                          img_meta: dict = None,
+                          points: List[Tensor],
+                          gt_instances: InstanceData,
+                          img_meta: dict,
+                          gt_instances_ignore: Optional[InstanceData] = None,
                           stage: str = 'init') -> tuple:
         """Compute targets for a single image."""
-        # Convert inputs to proper format
-        if not isinstance(gt_bboxes, BaseBoxes):
-            gt_bboxes = HorizontalBoxes(gt_bboxes)
-        
-        if gt_bboxes_ignore is not None and not isinstance(gt_bboxes_ignore, BaseBoxes):
-            gt_bboxes_ignore = HorizontalBoxes(gt_bboxes_ignore)
-        
-        # Convert points to bboxes with proper shape (N, 4)
-        point_bboxes = self.points2bbox(flat_points.unsqueeze(0))  # Add batch dim
-        point_bboxes = point_bboxes.view(-1, 4)  # Flatten to (N, 4)
-        
-        # Create InstanceData objects
-        pred_instances = InstanceData(priors=point_bboxes)
-        gt_instances = InstanceData(bboxes=gt_bboxes, labels=gt_labels)
-        
-        if gt_bboxes_ignore is not None:
-            gt_instances_ignore = InstanceData(bboxes=gt_bboxes_ignore)
-        else:
-            gt_instances_ignore = None
+        # Convert points to bboxes
+        bboxes = []
+        for points_per_level in points:
+            bboxes_per_level = self.points2bbox(points_per_level.unsqueeze(0))
+            bboxes.append(bboxes_per_level.squeeze(0))
+        bboxes = torch.cat(bboxes, dim=0)
+
+        # Create InstanceData for predictions
+        pred_instances = InstanceData(priors=bboxes)
         
         # Assign targets
         assign_result = self.assigner.assign(
@@ -262,35 +190,46 @@ class RepPointsRPNHead(AnchorFreeHead):
             gt_instances=gt_instances,
             gt_instances_ignore=gt_instances_ignore)
         
-        # Sample the results
+        # Sample results
         sampling_result = self.sampler.sample(
             assign_result=assign_result,
             pred_instances=pred_instances,
             gt_instances=gt_instances)
         
         # Prepare targets
-        num_valid_points = flat_points.shape[0]
-        labels = flat_points.new_full((num_valid_points,), self.num_classes, dtype=torch.long)
-        label_weights = flat_points.new_zeros(num_valid_points, dtype=torch.float)
-        bbox_gt = flat_points.new_zeros((num_valid_points, 4), dtype=torch.float)
-        bbox_weights = flat_points.new_zeros((num_valid_points, 4), dtype=torch.float)
+        num_points = bboxes.shape[0]
+        labels = bboxes.new_full((num_points,), self.num_classes, dtype=torch.long)
+        label_weights = bboxes.new_zeros(num_points, dtype=torch.float)
+        bbox_gt = bboxes.new_zeros((num_points, 4), dtype=torch.float)
+        bbox_weights = bboxes.new_zeros((num_points, 4), dtype=torch.float)
         
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
         
         if len(pos_inds) > 0:
             labels[pos_inds] = 0  # RPN binary classification
-            pos_bbox_gt = sampling_result.pos_gt_bboxes.tensor
-            bbox_gt[pos_inds, :] = pos_bbox_gt
+            bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes.tensor
             bbox_weights[pos_inds, :] = 1.0
         
         if len(neg_inds) > 0:
             label_weights[neg_inds] = 1.0
         
-        label_weights[valid_flags] = 1.0
+        # Split back into per-level
+        start_idx = 0
+        labels_list = []
+        label_weights_list = []
+        bbox_gt_list = []
+        bbox_weights_list = []
+        for points_per_level in points:
+            end_idx = start_idx + len(points_per_level)
+            labels_list.append(labels[start_idx:end_idx])
+            label_weights_list.append(label_weights[start_idx:end_idx])
+            bbox_gt_list.append(bbox_gt[start_idx:end_idx])
+            bbox_weights_list.append(bbox_weights[start_idx:end_idx])
+            start_idx = end_idx
         
-        return (labels, label_weights, bbox_gt, flat_points, 
-                bbox_weights, len(pos_inds))
+        return (labels_list, label_weights_list, bbox_gt_list, 
+                points, bbox_weights_list, len(pos_inds))
 
     def loss_by_feat(self,
                     cls_scores: List[Tensor],
@@ -666,20 +605,28 @@ class RepPointsRPNHead(AnchorFreeHead):
                     bbox_gt_init: List[Tensor], bbox_weights_init: List[Tensor],
                     bbox_gt_refine: List[Tensor], bbox_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int) -> Tuple[Tensor]:
-        
         """Calculate the loss of a single scale level."""
         # Classification loss
-        # Convert lists to tensors and reshape
+        # Reshape cls_score to (N, C, H, W) -> (N*H*W, C)
+        cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
+        
+        # Reshape labels and weights to match
         labels = torch.cat(labels, dim=0).reshape(-1)
         label_weights = torch.cat(label_weights, dim=0).reshape(-1)
         
-        cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-        cls_score = cls_score.contiguous()
+        # Only compute loss for valid points
+        valid_idx = label_weights > 0
+        cls_score = cls_score[valid_idx]
+        labels = labels[valid_idx]
+        label_weights = label_weights[valid_idx]
         
-        loss_cls = self.loss_cls(
-            cls_score, labels, label_weights, avg_factor=avg_factor_refine)
-        
-        # Points loss
+        if cls_score.numel() > 0:
+            loss_cls = self.loss_cls(
+                cls_score, labels, label_weights, avg_factor=avg_factor_refine)
+        else:
+            loss_cls = cls_score.sum() * 0  # return zero loss if no valid points
+
+        # Points loss (unchanged)
         bbox_gt_init = torch.cat(bbox_gt_init, dim=0).reshape(-1, 4)
         bbox_weights_init = torch.cat(bbox_weights_init, dim=0).reshape(-1, 4)
         bbox_pred_init = self.points2bbox(
