@@ -137,48 +137,52 @@ class RepPointsRPNHead(AnchorFreeHead):
                     stage: str = 'init',
                     return_sampling_results: bool = False) -> tuple:
         """Compute regression and classification targets for points."""
-        # Convert batch_img_metas to the expected format
+
+        # Step 1: Normalize image meta info
         img_metas = [{
             'img_shape': meta['img_shape'],
             'scale_factor': meta['scale_factor'],
             'batch_input_shape': meta['img_shape']
         } for meta in batch_img_metas]
 
-        # Get points for each level
-        num_levels = len(self.point_strides)
-        mlvl_points = []
-        for i in range(num_levels):
-            points_per_level = []
-            for img_id in range(len(batch_img_metas)):
-                points_per_level.append(points[img_id][i])
-            mlvl_points.append(points_per_level)
+        # Step 2: Transpose points -> per image
+        # points: [batch_size, num_levels] -> [num_levels, batch_size]
+        # We want: image_points = [ [lvl0, lvl1, ..., lvlN] for each image ]
+        num_images = len(points)
+        num_levels = len(points[0])
+        points_per_image = [ [points[i][lvl] for lvl in range(num_levels)] for i in range(num_images) ]
 
-        # Get targets for each image
-        (labels_list, label_weights_list, 
-        bbox_gt_list, candidate_list, 
+        # Step 3: Prepare ignore list
+        if batch_gt_instances_ignore is None:
+            batch_gt_instances_ignore = [None] * num_images
+
+        # Step 4: Compute targets using multi_apply
+        (labels_list, label_weights_list,
+        bbox_gt_list, candidate_list,
         bbox_weights_list, avg_factor) = multi_apply(
             self._get_targets_single,
-            mlvl_points,
+            points_per_image,
             batch_gt_instances,
-            batch_img_metas,
+            img_metas,
             batch_gt_instances_ignore,
-            stage=stage)
+            stage=stage
+        )
 
-        return (labels_list, label_weights_list, bbox_gt_list, 
+        return (labels_list, label_weights_list, bbox_gt_list,
                 candidate_list, bbox_weights_list, avg_factor)
 
+
     def _get_targets_single(self,
-                          points: List[Tensor],
-                          gt_instances: InstanceData,
-                          img_meta: dict,
-                          gt_instances_ignore: Optional[InstanceData] = None,
-                          stage: str = 'init') -> tuple:
+                            points: List[Tensor],
+                            gt_instances: InstanceData,
+                            img_meta: dict,
+                            gt_instances_ignore: Optional[InstanceData] = None,
+                            stage: str = 'init') -> tuple:
         """Compute targets for a single image."""
         # Convert points to bboxes
         bboxes = []
         for points_per_level in points:
             bboxes_per_level = self.points2bbox(points_per_level.unsqueeze(0))
-            # Ensure bboxes have shape (N, 4)
             if bboxes_per_level.dim() == 4:
                 bboxes_per_level = bboxes_per_level.view(-1, 4)
             bboxes.append(bboxes_per_level.squeeze(0))
@@ -186,46 +190,50 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         # Create InstanceData for predictions
         pred_instances = InstanceData(priors=bboxes)
-        
-        # Get ground truth boxes
-        gt_bboxes = gt_instances.bboxes
-        if gt_bboxes.dim() == 3:
-            gt_bboxes = gt_bboxes.squeeze(0)
-        
-        # Create InstanceData for ground truth
-        gt_instances = InstanceData(bboxes=gt_bboxes)
-        
+
+        # Ensure gt_bboxes are correctly shaped (e.g., remove batch dim if present)
+        if hasattr(gt_instances, 'bboxes'):
+            gt_bboxes = gt_instances.bboxes
+            if gt_bboxes.dim() == 3:
+                gt_instances.bboxes = gt_bboxes.squeeze(0)
+        else:
+            raise ValueError("gt_instances must have 'bboxes' attribute.")
+
+        # ✅ Ensure labels exist for assignment
+        if not hasattr(gt_instances, 'labels'):
+            raise AttributeError("gt_instances is missing the 'labels' attribute, which is required for assignment.")
+
         # Assign targets
         assign_result = self.assigner.assign(
             pred_instances=pred_instances,
             gt_instances=gt_instances,
             gt_instances_ignore=gt_instances_ignore)
-        
+
         # Sample results
         sampling_result = self.sampler.sample(
             assign_result=assign_result,
             pred_instances=pred_instances,
             gt_instances=gt_instances)
-        
-        # Prepare targets
+
+        # Prepare target tensors
         num_points = bboxes.shape[0]
         labels = bboxes.new_full((num_points,), self.num_classes, dtype=torch.long)
         label_weights = bboxes.new_zeros(num_points, dtype=torch.float)
         bbox_gt = bboxes.new_zeros((num_points, 4), dtype=torch.float)
         bbox_weights = bboxes.new_zeros((num_points, 4), dtype=torch.float)
-        
+
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
-        
+
         if len(pos_inds) > 0:
-            labels[pos_inds] = 0  # RPN binary classification
+            labels[pos_inds] = 0  # RPN is a binary classification (object vs. background)
             bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes.tensor
             bbox_weights[pos_inds, :] = 1.0
-        
+
         if len(neg_inds) > 0:
             label_weights[neg_inds] = 1.0
-        
-        # Split back into per-level
+
+        # Split targets back into per-feature level chunks
         start_idx = 0
         labels_list = []
         label_weights_list = []
@@ -241,9 +249,10 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         print(f"Number of positive samples: {len(pos_inds)}")
         print(f"Number of negative samples: {len(neg_inds)}")
-        
-        return (labels_list, label_weights_list, bbox_gt_list, 
+
+        return (labels_list, label_weights_list, bbox_gt_list,
                 points, bbox_weights_list, len(pos_inds))
+
 
     def loss_by_feat(self,
                     cls_scores: List[Tensor],
@@ -342,16 +351,24 @@ class RepPointsRPNHead(AnchorFreeHead):
             self.point_feat_channels,
             pts_out_dim, 1, 1, 0)
 
-    def forward(self, feats: Tuple[Tensor]) -> Tuple[List[Tensor]]:
-        """Forward features from BiFPN and return proposals.
-        
-        Args:
-            feats (tuple[Tensor]): Features from BiFPN.
-            
-        Returns:
-            tuple: cls_scores, bbox_preds for each level.
-        """
-        return multi_apply(self.forward_single, feats)
+    def forward(self, feats: Tuple[Tensor]) -> Union[
+        Tuple[List[Tensor], List[Tensor], List[Tensor]],
+        Tuple[List[Tensor], List[Tensor]]
+    ]:
+        for i, f in enumerate(feats):
+            print(f"Input feat[{i}]: shape={f.shape}")
+
+        outputs = multi_apply(self.forward_single, feats)
+
+        if self.training:
+            cls_scores, pts_preds_init, pts_preds_refine = outputs
+            print("RPN training mode")
+            return cls_scores, pts_preds_init, pts_preds_refine
+        else:
+            cls_scores, bbox_preds = outputs
+            print("RPN inference mode")
+            return cls_scores, bbox_preds
+
 
     def forward_single(self, x: Tensor) -> Tuple[Tensor]:
         """Forward feature map of a single FPN level."""
@@ -665,13 +682,15 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_pred_init / normalize_term,
             bbox_gt_init / normalize_term,
             bbox_weights_init,
-            avg_factor=float(avg_factor_init))
+            avg_factor_init = float(sum(avg_factor_init)) if isinstance(avg_factor_init, list) else float(avg_factor_init)
+        )
         
         loss_pts_refine = self.loss_bbox_refine(
             bbox_pred_refine / normalize_term,
             bbox_gt_refine / normalize_term,
             bbox_weights_refine,
-            avg_factor=float(avg_factor_refine))
+            avg_factor_refine = float(sum(avg_factor_refine)) if isinstance(avg_factor_refine, list) else float(avg_factor_refine)
+        )
         
         return loss_cls, loss_pts_init, loss_pts_refine
 
