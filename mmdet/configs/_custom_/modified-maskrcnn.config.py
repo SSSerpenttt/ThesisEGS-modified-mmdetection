@@ -75,23 +75,25 @@ model = dict(
     backbone=dict(
         type='mmdet.EfficientNet',
         arch='b3',
-        out_indices=(3, 4, 5),
-        init_cfg=dict(
-            type='Pretrained',
-            prefix='backbone',
-            checkpoint='https://download.openmmlab.com/mmdetection/v2.0/efficientnet/retinanet_effb3_fpn_crop896_8x4_1x_coco/retinanet_effb3_fpn_crop896_8x4_1x_coco_20220322_234806-615a0dda.pth'
-        ),
-        norm_cfg=dict(type='BN', requires_grad=True)  # Added BN config
+        out_indices=(1, 2, 3, 4),  # Correct stages for channel dimensions
+        norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.01, eps=1e-3),
+        norm_eval=False,
+        frozen_stages=0,
+        # init_cfg=dict(
+        #     type='Pretrained',
+        #     checkpoint='https://download.openmmlab.com/mmdetection/v3.0/efficientdet/efficientdet_effb3_bifpn_8xb16-crop896-300e_coco/efficientdet_effb3_bifpn_8xb16-crop896-300e_coco_20230223_122457-e6f7a833.pth',
+        #     prefix='backbone.'
+        # )
     ),
     neck=dict(
         type='mmdet.BiFPN',
-        in_channels=[48, 136, 384],
-        out_channels=256,
+        in_channels=[24, 32, 48, 136],  # Must match EfficientNet-b3 stages 2,3,4
+        out_channels=256,  # This will feed into RPN head
         num_outs=5,
         stack=2,
         start_level=0,
         end_level=-1,
-        norm_cfg=dict(type='BN', requires_grad=True),
+        norm_cfg=dict(type='mmdet.BN', requires_grad=True),
         add_extra_convs='on_output'
     ),
     rpn_head=dict(
@@ -100,68 +102,48 @@ model = dict(
         feat_channels=256,
         point_feat_channels=256,
         num_points=9,
-        gradient_mul=0.3,
+        gradient_mul=0.1,
         point_strides=[8, 16, 32, 64, 128],
         point_base_scale=4,
-        stacked_convs=3,
-        num_classes=1,
-        transform_method='minmax',
         loss_cls=dict(
-            type='mmdet.FocalLoss',
+            type='mmdet.CrossEntropyLoss',
             use_sigmoid=True,
-            gamma=2.0,
-            alpha=0.25,
-            loss_weight=1.0
-        ),
+            loss_weight=1.0),
         loss_bbox_init=dict(
-            type='mmdet.SmoothL1Loss',
-            beta=1.0,
-            loss_weight=0.5
-        ),
+            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=0.5),
         loss_bbox_refine=dict(
-            type='mmdet.SmoothL1Loss',
-            beta=1.0,
-            loss_weight=1.0
-        ),
+            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=1.0),
+        transform_method='moment',
+        topk=1000,
+        num_classes=1,  # Must be 1 for RPN
         train_cfg=dict(
             init=dict(
-                assigner=dict(
-                    type='mmdet.PointAssigner',
-                    scale=32,
-                    pos_num=5
-                ),
+                assigner=dict(type='mmdet.PointAssigner', scale=32, pos_num=5),
                 allowed_border=-1,
                 pos_weight=-1,
-                debug=False,
-                grad_clip=dict(max_norm=35, norm_type=2)
-            ),
+                debug=False),
             refine=dict(
                 assigner=dict(
                     type='mmdet.MaxIoUAssigner',
                     pos_iou_thr=0.5,
                     neg_iou_thr=0.4,
                     min_pos_iou=0,
-                    ignore_iof_thr=-1
-                ),
+                    ignore_iof_thr=-1),
                 sampler=dict(
                     type='mmdet.RandomSampler',
                     num=512,
                     pos_fraction=0.5,
                     neg_pos_ub=-1,
-                    add_gt_as_proposals=False
-                ),
+                    add_gt_as_proposals=False),
                 allowed_border=0,
                 pos_weight=-1,
-                debug=False
-            )
-        ),
+                debug=False)),
         test_cfg=dict(
             nms_pre=2000,
             min_bbox_size=0,
             score_thr=0.05,
-            nms=dict(type='nms', iou_threshold=0.7),
-            max_per_img=1000
-        )
+            nms=dict(type='mmdet.nms', iou_threshold=0.7),
+            max_per_img=1000)
     ),
     roi_head=dict(
         type='mmdet.StandardRoIHead',
@@ -172,27 +154,26 @@ model = dict(
                 output_size=7,
                 sampling_ratio=2
             ),
-            out_channels=256,
+            out_channels=256,  # Must match neck output channels
             featmap_strides=[8, 16, 32, 64, 128],
-            finest_scale=56  # Added for better small object handling
+            finest_scale=56
         ),
         bbox_head=dict(
             type='mmdet.Shared2FCBBoxHead',
-            in_channels=256,
+            in_channels=256,  # Must match roi extractor out_channels
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=19,
             reg_decoded_bbox=True,
             loss_cls=dict(
                 type='mmdet.FocalLoss',
-                use_sigmoid=False,
+                use_sigmoid=True,
                 gamma=2.0,
                 alpha=0.25,
                 loss_weight=1.0
             ),
             loss_bbox=dict(
-                type='mmdet.SmoothL1Loss',
-                beta=1.0,
+                type='mmdet.IoULoss',
                 loss_weight=1.0
             )
         ),
@@ -203,14 +184,14 @@ model = dict(
                 output_size=28,
                 sampling_ratio=2
             ),
-            out_channels=256,
+            out_channels=256,  # Must match neck output channels
             featmap_strides=[8, 16, 32, 64, 128],
-            finest_scale=56  # Added for better small object handling
+            finest_scale=56
         ),
         mask_head=dict(
             type='mmdet.FCNMaskHead',
             num_convs=4,
-            in_channels=256,
+            in_channels=256,  # Must match roi extractor out_channels
             conv_out_channels=256,
             num_classes=19,
             loss_mask=dict(
@@ -232,8 +213,7 @@ classes = (
     'panel-apillar', 'panel-bonnet', 'panel-bpillar',
     'panel-cpillar', 'panel-dpillar', 'panel-fender',
     'panel-frontdoor', 'panel-qpanel', 'panel-reardoor',
-    'panel-rockerpanel', 'panel-roof', 'panel-tailgate', 'panel-trunklid',
-    'depth-deep', 'depth-shallow'
+    'panel-rockerpanel', 'panel-roof', 'panel-tailgate', 'panel-trunklid'
 )
 
 metainfo = {
@@ -253,53 +233,41 @@ img_norm_cfg = dict(
     to_rgb=True
 )
 
-# Enhanced data pipeline
+
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='mmdet.LoadImageFromFile'),
     dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
-    dict(
-        type='mmdet.RandomChoiceResize',
-        scales=[(896, 896), (800, 800), (1024, 1024)],
-        keep_ratio=True
-    ),
+    dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(2, 2), keep_empty=False),
+    dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
     dict(type='mmdet.RandomFlip', prob=0.5),
+    dict(type='mmdet.EfficientNetPreprocessor', 
+         size_divisor=32,
+         mean=img_norm_cfg['mean'],
+         std=img_norm_cfg['std'],
+         to_rgb=img_norm_cfg['to_rgb']),
+    dict(type='mmdet.DebugInput'),
     dict(
-        type='mmdet.PhotoMetricDistortion',
-        brightness_delta=32,
-        contrast_range=(0.8, 1.2),  # More conservative range
-        saturation_range=(0.8, 1.2),
-        hue_delta=18
-    ),
-    dict(
-        type='mmdet.Albu',
-        transforms=[
-            dict(type='RandomRotate90', p=0.5),
-            dict(type='Cutout', num_holes=8, max_h_size=32, max_w_size=32, p=0.5)
-        ]
-    ),
-    dict(type='Normalize', **img_norm_cfg),
-    dict(type='mmdet.Pad', size_divisor=32),
-    dict(type='mmdet.PackDetInputs')
+        type='mmdet.TensorPackDetInputs',
+        meta_keys=('img_id', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
+    )
 ]
 
 train_dataloader = dict(
-    batch_size=2,  # Increased from 1 if GPU memory allows
-    num_workers=4,  # Increased from 2
-    persistent_workers=True,
-    pin_memory=True,
+    batch_size=1,  # Will stack into (B, C, H, W)
+    num_workers=2,
+    persistent_workers=False,
     sampler=dict(type='mmdet.DefaultSampler', shuffle=True),
     dataset=dict(
         type='mmdet.CocoDataset',
+        data_root=data_root,
+        ann_file='train/_annotations_cleaned_final.coco.json',
+        data_prefix=dict(img='train/'),
         metainfo=metainfo,
-        ann_file=data_root + 'train/_annotations_cleaned_final.coco.json',
-        data_prefix=dict(img=data_root + 'train/'),
-        filter_cfg=dict(
-            filter_empty_gt=True,
-            min_size=16  # Filter very small objects
-        ),
+        filter_cfg=dict(filter_empty_gt=True, min_size=32),
         pipeline=train_pipeline
-    )
+    ),
 )
+
 
 val_dataloader = dict(
     batch_size=1,
@@ -309,17 +277,24 @@ val_dataloader = dict(
     sampler=dict(type='mmdet.DefaultSampler', shuffle=False),
     dataset=dict(
         type='mmdet.CocoDataset',
+        data_root=data_root,
+        ann_file='valid/_annotations_cleaned_final.coco.json',
+        data_prefix=dict(img='valid/'),
         metainfo=metainfo,
-        ann_file=data_root + 'valid/_annotations_cleaned_final.coco.json',
-        data_prefix=dict(img=data_root + 'valid/'),
         filter_cfg=dict(filter_empty_gt=True),
         pipeline=[
-            dict(type='LoadImageFromFile'),
+            dict(type='mmdet.LoadImageFromFile'),
             dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
             dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='mmdet.Pad', size_divisor=32),
-            dict(type='mmdet.PackDetInputs')
+            dict(type='mmdet.EfficientNetPreprocessor',
+                 size_divisor=32,
+                 mean=img_norm_cfg['mean'],
+                 std=img_norm_cfg['std'],
+                 to_rgb=img_norm_cfg['to_rgb']),
+            dict(
+                type='mmdet.TensorPackDetInputs',
+                meta_keys=('img_id', 'img_shape', 'bbox', 'segm', 'ori_shape', 'scale_factor')
+            )
         ]
     )
 )
