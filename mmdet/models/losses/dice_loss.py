@@ -16,13 +16,9 @@ def dice_loss(pred,
     """
     Calculate the Dice Loss between `pred` and `target`.
 
-    Supports:
-    - V-Net style Dice Loss (squared denominator)
-    - Naive Dice Loss (linear denominator)
-
     Args:
-        pred (Tensor): Predicted probabilities, shape (N, *).
-        target (Tensor): Ground truth masks, shape (N, *), same shape as `pred`.
+        pred (Tensor): Predicted probabilities, shape (N, C, H, W).
+        target (Tensor): Ground truth masks, shape (N, H, W) or (N, 1, H, W).
         weight (Tensor, optional): Optional weight for each instance. Shape: (N,).
         eps (float): Small value to avoid division by zero. Default: 1e-3.
         reduction (str): Reduction method - 'none', 'mean', 'sum'. Default: 'mean'.
@@ -32,33 +28,48 @@ def dice_loss(pred,
     Returns:
         Tensor: Dice loss.
     """
+
+    # Ensure target is 4D: (N, 1, H, W)
+    if target.dim() == 3:
+        target = target.unsqueeze(1)  # (N, 1, H, W)
+    elif target.dim() != 4:
+        raise ValueError(f"Expected target to be 3D or 4D, but got shape {target.shape}")
+
+    # Resize target if needed
+    if target.shape[2:] != pred.shape[2:]:
+        target = torch.nn.functional.interpolate(
+            target.float(),
+            size=pred.shape[2:],  # (H_pred, W_pred)
+            mode='bilinear',
+            align_corners=False
+        )  # Now (N, 1, H_pred, W_pred)
+
+    # Expand channels to match pred
+    if pred.shape[1] > 1 and target.shape[1] == 1:
+        target = target.expand(-1, pred.shape[1], -1, -1)  # (N, C, H, W)
+
     # Flatten input and target to (N, -1)
     input = pred.flatten(1)
-
-    # Resize target to match pred if necessary
-    if target.shape != pred.shape:
-        target = torch.nn.functional.interpolate(
-            target.unsqueeze(1).float(),  # Add channel dimension
-            size=pred.shape[2:],          # Match spatial dims (H, W)
-            mode='bilinear',              # or 'nearest' if binary masks
-            align_corners=False
-        ).squeeze(1)  # Remove channel dimension after interpolation
-
     target = target.flatten(1).float()
 
-    # Intersection
-    intersection = torch.sum(pred * target, dim=1)
+    print("Before Intersection in Dice Loss:")
+    print("Target shape (in Dice Loss):", target.shape)
+    print("Prediction shape (In Dice Loss):", input.shape)
 
+    # Intersection
+    intersection = torch.sum(input * target, dim=1)
+
+    # Union
     if naive_dice:
-        union = torch.sum(pred, dim=1) + torch.sum(target, dim=1)
+        union = torch.sum(input, dim=1) + torch.sum(target, dim=1)
     else:
-        union = torch.sum(pred * pred, dim=1) + torch.sum(target * target, dim=1)
+        union = torch.sum(input * input, dim=1) + torch.sum(target * target, dim=1)
 
     # Dice coefficient
     dice_score = (2 * intersection + eps) / (union + eps)
     loss = 1 - dice_score
 
-    # Apply weight if provided and dimensions match
+    # Apply instance weight if provided
     if weight is not None:
         if weight.shape[0] == loss.shape[0]:
             loss = loss * weight
