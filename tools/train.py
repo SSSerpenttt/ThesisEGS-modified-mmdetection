@@ -29,26 +29,45 @@ class RenameGtLabels:
         return results
 
 @TRANSFORMS.register_module()
-class Mask2Box:
-    """Convert mask annotations to bounding boxes."""
-
-    def __init__(self):
-        pass
-
-    def __call__(self, results):
-        """Convert mask to bbox and store in `results['gt_bboxes']`."""
-        gt_masks = results.get('gt_masks', None)
-        if gt_masks is not None:
-            results['gt_bboxes'] = mask2bbox(gt_masks)
-        return results
-
-@TRANSFORMS.register_module()
 class InspectAnnotations:
     def __call__(self, results):
-        print("Loaded Annotations keys:", results.get('gt_instances').keys() if 'gt_instances' in results else "No gt_instances")
-        if 'gt_instances' in results:
-            print("BBoxes shape:", np.array(results['gt_instances'].get('bboxes', [])).shape)
-            print("Labels shape:", np.array(results['gt_bboxes_labels'].get('labels', [])).shape)
+        # Check for ground-truth boxes:
+        if 'gt_bboxes' in results:
+            gt_bboxes = results['gt_bboxes']
+            # If the boxes are wrapped (e.g., in a HorizontalBoxes),
+            # try to get the underlying tensor.
+            if hasattr(gt_bboxes, 'tensor'):
+                bbox_tensor = gt_bboxes.tensor
+            else:
+                bbox_tensor = gt_bboxes
+            print("BBoxes shape:", np.array(bbox_tensor.cpu().numpy()).shape)
+        else:
+            print("No gt_bboxes found!")
+        
+        # Check for ground-truth labels:
+        if 'gt_bboxes_labels' in results:
+            gt_labels = results['gt_bboxes_labels']
+            # It might be a list of labels or a tensor.
+            if isinstance(gt_labels, torch.Tensor):
+                labels_array = gt_labels.cpu().numpy()
+            else:
+                labels_array = np.array(gt_labels)
+            print("Labels shape:", labels_array.shape)
+        else:
+            print("No gt_bboxes_labels found!")
+        
+        # Optionally, check gt_masks if available:
+        if 'gt_masks' in results:
+            gt_masks = results['gt_masks']
+            # Depending on the format, this might be a custom object.
+            # If using PolygonMasks, you might check the number of masks.
+            if hasattr(gt_masks, 'masks'):
+                print("gt_masks has", len(gt_masks.masks), "masks")
+            else:
+                print("gt_masks:", type(gt_masks))
+        else:
+            print("No gt_masks found!")
+        
         return results
 
 @TRANSFORMS.register_module()
@@ -90,26 +109,6 @@ class EfficientNetPreprocessor:
         results['img'] = img.contiguous()
         results['img_shape'] = (img.shape[-2], img.shape[-1])
         return results
-
-@TRANSFORMS.register_module()
-class BatchDimensionAdder:
-    """Adds batch dimension to the tensor"""
-    def __call__(self, results):
-        if 'img' in results and isinstance(results['img'], torch.Tensor):
-            # Add batch dimension if not already present
-            if results['img'].ndim == 3:
-                results['img'] = results['img'].unsqueeze(0)
-        return results
-
-@TRANSFORMS.register_module()
-class MetaInfoAdder:
-    def __call__(self, results):
-        if 'img_info' in results:
-            results['img_id'] = results['img_info'].get('id', None)
-            results['ori_shape'] = results['img_info'].get('ori_shape', None)
-            results['scale_factor'] = results.get('scale_factor', None)
-        return results
-
 
 @TRANSFORMS.register_module()
 class TensorPackDetInputs:
