@@ -217,51 +217,38 @@ class TwoStageDetector(BaseDetector):
         return losses
 
 
-    def predict(self,
-                batch_inputs: Tensor,
-                batch_data_samples: SampleList,
-                rescale: bool = True) -> SampleList:
-        """Predict results from a batch of inputs and data samples with post-
-        processing.
-
+    def predict(self, batch_inputs: Tensor, batch_data_samples: SampleList, **kwargs) -> list:
+        """Perform forward propagation during prediction.
+    
         Args:
-            batch_inputs (Tensor): Inputs with shape (N, C, H, W).
-            batch_data_samples (List[:obj:`DetDataSample`]): The Data
-                Samples. It usually includes information such as
-                `gt_instance`, `gt_panoptic_seg` and `gt_sem_seg`.
-            rescale (bool): Whether to rescale the results.
-                Defaults to True.
-
+            batch_inputs (Tensor): The input tensor with shape (N, C, H, W).
+            batch_data_samples (List[DetDataSample] or nested tuples): Meta info and annotations.
+    
         Returns:
-            list[:obj:`DetDataSample`]: Return the detection results of the
-            input images. The returns value is DetDataSample,
-            which usually contain 'pred_instances'. And the
-            ``pred_instances`` usually contains following keys.
-
-                - scores (Tensor): Classification scores, has a shape
-                    (num_instance, )
-                - labels (Tensor): Labels of bboxes, has a shape
-                    (num_instances, ).
-                - bboxes (Tensor): Has a shape (num_instances, 4),
-                    the last dimension 4 arrange as (x1, y1, x2, y2).
-                - masks (Tensor): Has a shape (num_instances, H, W).
+            list: List of detection results.
         """
-
-        assert self.with_bbox, 'Bbox head must be implemented.'
+        # Unwrap outer tuple if needed
+        if isinstance(batch_data_samples, tuple):
+            batch_data_samples = batch_data_samples[0]
+    
+        # Unwrap each item if it's a tuple
+        batch_data_samples = [
+            data_sample[0] if isinstance(data_sample, tuple) else data_sample
+            for data_sample in batch_data_samples
+        ]
+    
         x = self.extract_feat(batch_inputs)
-
-        # If there are no pre-defined proposals, use RPN to get proposals
-        if batch_data_samples[0].get('proposals', None) is None:
-            rpn_results_list = self.rpn_head.predict(
-                x, batch_data_samples, rescale=False)
+    
+        if self.with_rpn:
+            rpn_outputs = self.rpn_head.forward(x)
+            cls_scores, bbox_preds = rpn_outputs
+            proposals = self.rpn_head.get_proposals(cls_scores, bbox_preds, batch_data_samples)
         else:
-            rpn_results_list = [
+            proposals = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
+    
+        results_list = self.roi_head.predict(x, proposals, batch_data_samples, rescale=True)
+    
+        return results_list
 
-        results_list = self.roi_head.predict(
-            x, rpn_results_list, batch_data_samples, rescale=rescale)
-
-        batch_data_samples = self.add_pred_to_datasample(
-            batch_data_samples, results_list)
-        return batch_data_samples
