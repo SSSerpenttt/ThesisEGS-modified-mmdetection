@@ -17,6 +17,30 @@ import numpy as np
 from mmengine.structures import InstanceData
 from mmdet.structures import DetDataSample
 from mmdet.structures.mask import PolygonMasks
+from mmdet.structures.mask import mask2bbox
+
+
+@TRANSFORMS.register_module()
+class RenameGtLabels:
+    def __call__(self, results):
+        # If "gt_labels" is missing and "gt_bboxes_labels" exists, rename it.
+        if 'gt_bboxes_labels' in results and 'gt_labels' not in results:
+            results['gt_labels'] = results['gt_bboxes_labels']
+        return results
+
+@TRANSFORMS.register_module()
+class Mask2Box:
+    """Convert mask annotations to bounding boxes."""
+
+    def __init__(self):
+        pass
+
+    def __call__(self, results):
+        """Convert mask to bbox and store in `results['gt_bboxes']`."""
+        gt_masks = results.get('gt_masks', None)
+        if gt_masks is not None:
+            results['gt_bboxes'] = mask2bbox(gt_masks)
+        return results
 
 @TRANSFORMS.register_module()
 class InspectAnnotations:
@@ -24,7 +48,7 @@ class InspectAnnotations:
         print("Loaded Annotations keys:", results.get('gt_instances').keys() if 'gt_instances' in results else "No gt_instances")
         if 'gt_instances' in results:
             print("BBoxes shape:", np.array(results['gt_instances'].get('bboxes', [])).shape)
-            print("Labels shape:", np.array(results['gt_instances'].get('labels', [])).shape)
+            print("Labels shape:", np.array(results['gt_bboxes_labels'].get('labels', [])).shape)
         return results
 
 @TRANSFORMS.register_module()
@@ -86,86 +110,66 @@ class MetaInfoAdder:
             results['scale_factor'] = results.get('scale_factor', None)
         return results
 
+
 @TRANSFORMS.register_module()
 class TensorPackDetInputs:
     def __init__(self, meta_keys=()):
         self.meta_keys = meta_keys
 
     def __call__(self, results):
-        print("🔍 Keys in results before packing:", results.keys())
         packed_results = {}
 
-        # --- Pack image ---
+        # Pack image
         if 'img' in results:
             img = results['img']
             if not isinstance(img, torch.Tensor):
                 img = torch.from_numpy(np.ascontiguousarray(img))
             packed_results['inputs'] = img.contiguous()
 
-        # --- Create DetDataSample ---
+        # Create DetDataSample
         data_sample = DetDataSample()
+        gt_instances = InstanceData()
 
-        if 'gt_instances' in results:
-            gt_instances = InstanceData()
-            for k, v in results['gt_instances'].items():
-                if k == 'masks':
-                    continue  # masks handled separately
-                if not isinstance(v, torch.Tensor):
-                    v = torch.from_numpy(np.array(v))
-                setattr(gt_instances, k, v)
-
-            # Ensure labels and bboxes exist
-            if not hasattr(gt_instances, 'labels'):
-                gt_instances.labels = torch.tensor([], dtype=torch.long)
-            if not hasattr(gt_instances, 'bboxes'):
-                gt_instances.bboxes = torch.empty((0, 4))
+        # Handle bboxes
+        if 'gt_bboxes' in results:
+            raw_bboxes = results['gt_bboxes']
+            if hasattr(raw_bboxes, 'tensor'):
+                gt_instances.bboxes = raw_bboxes.tensor.float()
+            else:
+                gt_instances.bboxes = torch.as_tensor(raw_bboxes, dtype=torch.float32)
+        
+        # Handle labels - ensure we have same number as bboxes
+        if 'gt_labels' in results:
+            labels = torch.as_tensor(results['gt_labels'], dtype=torch.long)
+        elif 'gt_bboxes_labels' in results:
+            labels = torch.as_tensor(results['gt_bboxes_labels'], dtype=torch.long)
         else:
-            gt_instances = InstanceData()
-            gt_instances.labels = torch.tensor([], dtype=torch.long)
-            gt_instances.bboxes = torch.empty((0, 4))
+            num_boxes = len(gt_instances.bboxes) if hasattr(gt_instances, 'bboxes') else 0
+            labels = torch.zeros(num_boxes, dtype=torch.long)
 
-        # --- Handle COCO-style polygon masks ---
+        
+        gt_instances.labels = labels
+
+        # Handle masks if present
         if 'gt_masks' in results:
             polygons = results['gt_masks']
             height, width = results['img_shape']
-
             formatted_polygons = []
             for seg in polygons:
                 formatted_seg = [np.array(p, dtype=np.float32) for p in seg]
                 formatted_polygons.append(formatted_seg)
-
             gt_instances.masks = PolygonMasks(formatted_polygons, height, width)
-        else:
-            print("⚠️ [Warning] No gt_masks found in results")
 
         data_sample.gt_instances = gt_instances
 
-        # --- Debug print for gt_instances ---
-        print("✅ Debug: gt_instances loaded")
-        print(" - bboxes:", getattr(gt_instances, 'bboxes', None))
-        print(" - labels:", getattr(gt_instances, 'labels', None))
-        if hasattr(gt_instances, 'masks'):
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            print(" - masks:", gt_instances.masks.to_tensor(dtype=torch.bool, device=device).shape)
-        else:
-            print(" - masks: None")
-
-        # --- Pack metainfo ---
+        # Pack metainfo
         meta_dict = {}
         for key in self.meta_keys:
             if key in results:
                 meta_dict[key] = results[key]
         data_sample.set_metainfo(meta_dict)
 
-        # --- Final packing ---
         packed_results['data_samples'] = [data_sample]
-
-        for key in self.meta_keys:
-            if key not in results:
-                print(f"⚠️ [Warning] Missing meta key: {key}")
-
-        print("📦 Packed DetDataSample metainfo:", data_sample.metainfo)
-
         return packed_results
 
 
