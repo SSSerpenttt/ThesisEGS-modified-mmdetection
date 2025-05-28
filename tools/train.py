@@ -31,7 +31,7 @@ class RenameGtLabels:
 @TRANSFORMS.register_module()
 class InspectAnnotations:
     def __call__(self, results):
-        print("InspectAnnotations running", flush=True)
+        # print("InspectAnnotations running", flush=True)
         # Check for ground-truth boxes:
         if 'gt_bboxes' in results:
             gt_bboxes = results['gt_bboxes']
@@ -41,9 +41,9 @@ class InspectAnnotations:
                 bbox_tensor = gt_bboxes.tensor
             else:
                 bbox_tensor = gt_bboxes
-            print("BBoxes shape:", np.array(bbox_tensor.cpu().numpy()).shape, flush=True)
-        else:
-            print("No gt_bboxes found!", flush=True)
+        #     print("BBoxes shape:", np.array(bbox_tensor.cpu().numpy()).shape, flush=True)
+        # else:
+        #     print("No gt_bboxes found!", flush=True)
         
         # Check for ground-truth labels:
         if 'gt_bboxes_labels' in results:
@@ -53,21 +53,21 @@ class InspectAnnotations:
                 labels_array = gt_labels.cpu().numpy()
             else:
                 labels_array = np.array(gt_labels)
-            print("Labels shape:", labels_array.shape, flush=True)
-        else:
-            print("No gt_bboxes_labels found!", flush=True)
+        #     print("Labels shape:", labels_array.shape, flush=True)
+        # else:
+        #     print("No gt_bboxes_labels found!", flush=True)
         
         # Optionally, check gt_masks if available:
         if 'gt_masks' in results:
             gt_masks = results['gt_masks']
-            # Depending on the format, this might be a custom object.
-            # If using PolygonMasks, you might check the number of masks.
-            if hasattr(gt_masks, 'masks'):
-                print("gt_masks has", len(gt_masks.masks), "masks", flush=True)
-            else:
-                print("gt_masks:", type(gt_masks), flush=True)
-        else:
-            print("No gt_masks found!", flush=True)
+        #     # Depending on the format, this might be a custom object.
+        #     # If using PolygonMasks, you might check the number of masks.
+        #     if hasattr(gt_masks, 'masks'):
+        #         print("gt_masks has", len(gt_masks.masks), "masks", flush=True)
+        #     else:
+        #         print("gt_masks:", type(gt_masks), flush=True)
+        # else:
+        #     print("No gt_masks found!", flush=True)
         
         return results
 
