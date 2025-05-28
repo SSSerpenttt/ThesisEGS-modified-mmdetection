@@ -137,7 +137,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                     stage: str = 'init',
                     return_sampling_results: bool = False) -> tuple:
         """Compute regression and classification targets for points."""
-        print("In: get_targets")
+        # print("In: get_targets")
 
         # Normalize image meta info
         img_metas = [{
@@ -374,17 +374,17 @@ class RepPointsRPNHead(AnchorFreeHead):
             Tuple[List[Tensor], List[Tensor]]]:
         
         for i, f in enumerate(feats):
-            print(f"Input feat[{i}]: shape={f.shape}")
+            # print(f"Input feat[{i}]: shape={f.shape}")
 
         outputs = multi_apply(self.forward_single, feats)
 
         if self.training:
             cls_scores, pts_preds_init, pts_preds_refine = outputs
-            print("RPN training mode")
+            # print("RPN training mode")
             return cls_scores, pts_preds_init, pts_preds_refine
         else:
             cls_scores, bbox_preds = outputs
-            print("RPN inference mode")
+            # print("RPN inference mode")
             return cls_scores, bbox_preds
 
 
@@ -459,7 +459,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         Returns:
             Tensor: Bounding boxes in (x1, y1, x2, y2) format, shape (num_bboxes, 4).
         """
-        print(f"Input pts shape: {pts.shape}")
+        # print(f"Input pts shape: {pts.shape}")
 
         # Normalize input dimensions: expecting something like (batch_size, num_points*2, 1) or (batch_size, num_points, 2)
         if pts.dim() == 2:
@@ -471,7 +471,7 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         # Now reshape to separate x and y coords: (batch, N, 2, ...)
         pts_reshape = pts.view(pts.shape[0], -1, 2, *pts.shape[2:])
-        print(f"Reshaped pts shape: {pts_reshape.shape}")
+        # print(f"Reshaped pts shape: {pts_reshape.shape}")
 
         # Extract y and x depending on y_first
         pts_y = pts_reshape[:, :, 0, ...] if y_first else pts_reshape[:, :, 1, ...]
@@ -517,7 +517,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         else:
             raise NotImplementedError(f"Unknown transform method: {self.transform_method}")
 
-        print(f"Raw bbox shape: {bbox.shape}")
+        # print(f"Raw bbox shape: {bbox.shape}")
 
         # Reshape bbox to (N, 4)
         if bbox.dim() == 4:
@@ -532,7 +532,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         else:
             raise ValueError(f"Unexpected bbox dimension: {bbox.dim()}")
 
-        print(f"Final bbox shape: {bbox.shape}")
+        # print(f"Final bbox shape: {bbox.shape}")
         return bbox
 
 
@@ -582,7 +582,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         }
 
         # Debug print statement
-        print(f"[DEBUG] Converted img_meta for img_id {img_meta.get('img_id', 'N/A')}:\n{img_meta}\n")
+        # print(f"[DEBUG] Converted img_meta for img_id {img_meta.get('img_id', 'N/A')}:\n{img_meta}\n")
 
         return img_meta
 
