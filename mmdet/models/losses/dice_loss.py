@@ -52,9 +52,9 @@ def dice_loss(pred,
     input = pred.flatten(1)
     target = target.flatten(1).float()
 
-    print("Before Intersection in Dice Loss:")
-    print("Target shape (in Dice Loss):", target.shape)
-    print("Prediction shape (In Dice Loss):", input.shape)
+    # print("Before Intersection in Dice Loss:")
+    # print("Target shape (in Dice Loss):", target.shape)
+    # print("Prediction shape (In Dice Loss):", input.shape)
 
     # Intersection
     intersection = torch.sum(input * target, dim=1)
@@ -143,7 +143,7 @@ class DiceLoss(nn.Module):
         Returns:
             torch.Tensor: The calculated loss
         """
-        print("Dice loss forward called", flush=True)
+        # print("Dice loss forward called", flush=True)
 
         assert reduction_override in (None, 'none', 'mean', 'sum')
         reduction = (
