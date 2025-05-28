@@ -112,7 +112,7 @@ class TwoStageDetector(BaseDetector):
           return x
 
     def _forward(self, batch_inputs: Tensor,
-                 batch_data_samples: SampleList) -> tuple:
+                batch_data_samples: SampleList) -> tuple:
         """Network forward process. Usually includes backbone, neck and head
         forward without any post-processing.
 
@@ -126,29 +126,57 @@ class TwoStageDetector(BaseDetector):
             tuple: A tuple of features from ``rpn_head`` and ``roi_head``
             forward.
         """
-        results = ()
+        # Unwrap if batch_data_samples itself is a tuple
+        if isinstance(batch_data_samples, tuple):
+            batch_data_samples = batch_data_samples[0]
+
+        # Unwrap inner elements if they are tuples
+        batch_data_samples = [
+            data_sample[0] if isinstance(data_sample, tuple) else data_sample
+            for data_sample in batch_data_samples
+        ]
+
         x = self.extract_feat(batch_inputs)
 
         if self.with_rpn:
             rpn_outputs = self.rpn_head.forward(x)
             if self.rpn_head.training:
                 cls_scores, _, pts_preds_refine = rpn_outputs
-                rpn_results_list = self.rpn_head.get_proposals(cls_scores, pts_preds_refine, batch_data_samples)
+                rpn_results_list = self.rpn_head.get_proposals(
+                    cls_scores, pts_preds_refine, batch_data_samples)
             else:
                 cls_scores, bbox_preds = rpn_outputs
-                rpn_results_list = self.rpn_head.get_proposals(cls_scores, bbox_preds, batch_data_samples)
-        roi_outs = self.roi_head.forward(x, rpn_results_list,
-                                         batch_data_samples)
-        results = results + (roi_outs, )
-        return results
+                rpn_results_list = self.rpn_head.get_proposals(
+                    cls_scores, bbox_preds, batch_data_samples)
+        else:
+            # If RPN is not used, use existing proposals
+            rpn_results_list = [
+                data_sample.proposals for data_sample in batch_data_samples
+            ]
+
+        roi_outs = self.roi_head.forward(x, rpn_results_list, batch_data_samples)
+        return roi_outs
+
+
 
     def loss(self, batch_inputs: Tensor, batch_data_samples: SampleList) -> dict:
         """Calculate losses from a batch of inputs and data samples."""
         print(f"Type of batch_data_samples: {type(batch_data_samples)}")
+        
+        # Unwrap if batch_data_samples itself is a tuple
         if isinstance(batch_data_samples, tuple):
             print(f"Length of tuple batch_data_samples: {len(batch_data_samples)}")
             batch_data_samples = batch_data_samples[0]
+
+        # Unwrap inner elements if they are tuples
+        batch_data_samples = [
+            data_sample[0] if isinstance(data_sample, tuple) else data_sample
+            for data_sample in batch_data_samples
+        ]
         print(f"Type after adjustment: {type(batch_data_samples)}")
+        print("DEBUG: batch_data_samples type:", type(batch_data_samples))
+        print("DEBUG: First entry type:", type(batch_data_samples[0]))
+        print("DEBUG: First entry contents:", batch_data_samples[0])
 
         x = self.extract_feat(batch_inputs)
         losses = dict()
@@ -156,15 +184,14 @@ class TwoStageDetector(BaseDetector):
         # RPN forward and loss
         if self.with_rpn:
             proposal_cfg = self.train_cfg.get('rpn_proposal', self.test_cfg.rpn)
-            
+
             # Create RPN-specific data samples
             rpn_data_samples = []
             for data_sample in batch_data_samples:
-                if isinstance(data_sample, tuple):
-                    data_sample = data_sample[0]
                 rpn_instances = InstanceData()
                 rpn_instances.bboxes = data_sample.gt_instances.bboxes
                 rpn_instances.labels = torch.zeros_like(data_sample.gt_instances.labels)
+
                 rpn_sample = DetDataSample()
                 rpn_sample.gt_instances = rpn_instances
                 rpn_sample.set_metainfo(data_sample.metainfo)
@@ -172,7 +199,7 @@ class TwoStageDetector(BaseDetector):
 
             rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
-            
+
             # Rename losses to include 'rpn_' prefix
             for key in list(rpn_losses.keys()):
                 if 'loss' in key and 'rpn' not in key:
@@ -188,6 +215,7 @@ class TwoStageDetector(BaseDetector):
         losses.update(roi_losses)
 
         return losses
+
 
     def predict(self,
                 batch_inputs: Tensor,
