@@ -201,6 +201,15 @@ class FCNMaskHead(BaseModule):
 
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
 
+        print("Target shape (in FCN Mask Head):", mask_targets.shape)
+        print("Prediction shape (In FCN Mask Head):", mask_preds.shape)
+
+        if mask_targets.dim() == 3:
+            mask_targets = mask_targets.unsqueeze(1)
+
+        print("Resized Target shape (in FCN Mask Head):", mask_targets.shape)
+        print("Prediction shape (In FCN Mask Head):", mask_preds.shape)
+
         loss = dict()
         if mask_preds.size(0) == 0:
             loss_mask = mask_preds.sum()
