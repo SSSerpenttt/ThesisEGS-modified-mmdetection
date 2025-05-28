@@ -13,53 +13,62 @@ def dice_loss(pred,
               reduction='mean',
               naive_dice=False,
               avg_factor=None):
-    """Calculate dice loss, there are two forms of dice loss is supported:
+    """
+    Calculate the Dice Loss between `pred` and `target`.
 
-        - the one proposed in `V-Net: Fully Convolutional Neural
-            Networks for Volumetric Medical Image Segmentation
-            <https://arxiv.org/abs/1606.04797>`_.
-        - the dice loss in which the power of the number in the
-            denominator is the first power instead of the second
-            power.
+    Supports:
+    - V-Net style Dice Loss (squared denominator)
+    - Naive Dice Loss (linear denominator)
 
     Args:
-        pred (torch.Tensor): The prediction, has a shape (n, *)
-        target (torch.Tensor): The learning label of the prediction,
-            shape (n, *), same shape of pred.
-        weight (torch.Tensor, optional): The weight of loss for each
-            prediction, has a shape (n,). Defaults to None.
-        eps (float): Avoid dividing by zero. Default: 1e-3.
-        reduction (str, optional): The method used to reduce the loss into
-            a scalar. Defaults to 'mean'.
-            Options are "none", "mean" and "sum".
-        naive_dice (bool, optional): If false, use the dice
-                loss defined in the V-Net paper, otherwise, use the
-                naive dice loss in which the power of the number in the
-                denominator is the first power instead of the second
-                power.Defaults to False.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-    """
+        pred (Tensor): Predicted probabilities, shape (N, *).
+        target (Tensor): Ground truth masks, shape (N, *), same shape as `pred`.
+        weight (Tensor, optional): Optional weight for each instance. Shape: (N,).
+        eps (float): Small value to avoid division by zero. Default: 1e-3.
+        reduction (str): Reduction method - 'none', 'mean', 'sum'. Default: 'mean'.
+        naive_dice (bool): Use naive Dice (linear denominator) if True. Default: False.
+        avg_factor (int, optional): Normalization factor. Default: None.
 
+    Returns:
+        Tensor: Dice loss.
+    """
+    # Flatten input and target to (N, -1)
     input = pred.flatten(1)
+
+    # Resize target to match pred if necessary
+    if target.shape != pred.shape:
+        target = torch.nn.functional.interpolate(
+            target.unsqueeze(1).float(),  # Add channel dimension
+            size=pred.shape[2:],          # Match spatial dims (H, W)
+            mode='bilinear',              # or 'nearest' if binary masks
+            align_corners=False
+        ).squeeze(1)  # Remove channel dimension after interpolation
+
     target = target.flatten(1).float()
 
-    a = torch.sum(input * target, 1)
-    if naive_dice:
-        b = torch.sum(input, 1)
-        c = torch.sum(target, 1)
-        d = (2 * a + eps) / (b + c + eps)
-    else:
-        b = torch.sum(input * input, 1) + eps
-        c = torch.sum(target * target, 1) + eps
-        d = (2 * a) / (b + c)
+    # Intersection
+    intersection = torch.sum(pred * target, dim=1)
 
-    loss = 1 - d
+    if naive_dice:
+        union = torch.sum(pred, dim=1) + torch.sum(target, dim=1)
+    else:
+        union = torch.sum(pred * pred, dim=1) + torch.sum(target * target, dim=1)
+
+    # Dice coefficient
+    dice_score = (2 * intersection + eps) / (union + eps)
+    loss = 1 - dice_score
+
+    # Apply weight if provided and dimensions match
     if weight is not None:
-        assert weight.ndim == loss.ndim
-        assert len(weight) == len(pred)
-    loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
+        if weight.shape[0] == loss.shape[0]:
+            loss = loss * weight
+        else:
+            raise ValueError(f"Weight shape {weight.shape} does not match loss shape {loss.shape}")
+
+    # Reduce loss
+    loss = weight_reduce_loss(loss, weight=None, reduction=reduction, avg_factor=avg_factor)
     return loss
+
 
 
 @MODELS.register_module()
