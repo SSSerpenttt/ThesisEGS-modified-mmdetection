@@ -373,7 +373,7 @@ class RepPointsRPNHead(AnchorFreeHead):
             Tuple[List[Tensor], List[Tensor], List[Tensor]],
             Tuple[List[Tensor], List[Tensor]]]:
         
-        for i, f in enumerate(feats):
+        # for i, f in enumerate(feats):
             # print(f"Input feat[{i}]: shape={f.shape}")
 
         outputs = multi_apply(self.forward_single, feats)
