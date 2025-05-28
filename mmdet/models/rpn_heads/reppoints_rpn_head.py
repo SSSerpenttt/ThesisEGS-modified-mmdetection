@@ -10,7 +10,7 @@ from typing import Sequence, Tuple, List, Dict, Optional, Union
 
 from mmdet.structures.bbox import HorizontalBoxes, BaseBoxes
 from mmdet.registry import MODELS, TASK_UTILS
-from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList, multi_apply
+from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
 from mmdet.models.task_modules.prior_generators import MlvlPointGenerator
 from mmdet.models.task_modules.samplers import PseudoSampler
 from mmdet.models.utils import (filter_scores_and_topk, images_to_levels, multi_apply, unmap)
