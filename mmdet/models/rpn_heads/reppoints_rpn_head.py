@@ -647,6 +647,31 @@ class RepPointsRPNHead(AnchorFreeHead):
         return center_list, valid_flag_list
 
 
+    def gt_boxes_to_points(gt_boxes: Tensor, num_points: int = 9) -> Tensor:
+        """
+        Args:
+            gt_boxes: [N, 4] (x1, y1, x2, y2)
+            num_points: Number of points per box.
+        Returns:
+            gt_points: [N, num_points, 2] (x, y) coordinates.
+        """
+        # Example: Uniform grid sampling
+        x = torch.linspace(0, 1, int(np.sqrt(num_points)))
+        y = torch.linspace(0, 1, int(np.sqrt(num_points)))
+        grid_x, grid_y = torch.meshgrid(x, y)
+        grid = torch.stack([grid_x, grid_y], dim=-1).view(-1, 2)  # [num_points, 2]
+    
+        # Scale to each GT box
+        widths = gt_boxes[:, 2] - gt_boxes[:, 0]
+        heights = gt_boxes[:, 3] - gt_boxes[:, 1]
+        centers_x = gt_boxes[:, 0] + 0.5 * widths
+        centers_y = gt_boxes[:, 1] + 0.5 * heights
+    
+        gt_points = grid.unsqueeze(0) * torch.stack([widths, heights], dim=-1).unsqueeze(1)
+        gt_points += torch.stack([centers_x, centers_y], dim=-1).unsqueeze(1)
+        return gt_points
+
+
     def loss(self, cls_scores: List[Tensor], pts_preds_init: List[Tensor],
             pts_preds_refine: List[Tensor], batch_gt_instances: InstanceList,
             img_metas_dict, batch_gt_instances_ignore: OptInstanceList = None) -> dict:
