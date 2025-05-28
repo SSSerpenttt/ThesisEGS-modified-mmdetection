@@ -217,15 +217,15 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         pred_instances = InstanceData(priors=bboxes)
 
-        # Validate gt_instances bboxes and labels
+        # Validate gt_instances bboxes and s
         if not hasattr(gt_instances, 'bboxes'):
             raise ValueError("gt_instances must have 'bboxes' attribute.")
         gt_bboxes = gt_instances.bboxes
         if gt_bboxes.dim() == 3:
             gt_instances.bboxes = gt_bboxes.squeeze(0)
 
-        if not hasattr(gt_instances, 'labels'):
-            raise AttributeError("gt_instances missing 'labels' attribute.")
+        if not hasattr(gt_instances, 's'):
+            raise AttributeError("gt_instances missing 's' attribute.")
 
         assign_result = self.assigner.assign(
             pred_instances=pred_instances,
@@ -238,8 +238,8 @@ class RepPointsRPNHead(AnchorFreeHead):
             gt_instances=gt_instances)
 
         num_points = bboxes.shape[0]
-        labels = bboxes.new_full((num_points,), self.num_classes, dtype=torch.long)
-        label_weights = bboxes.new_zeros(num_points, dtype=torch.float)
+        s = bboxes.new_full((num_points,), self.num_classes, dtype=torch.long)
+        _weights = bboxes.new_zeros(num_points, dtype=torch.float)
         bbox_gt = bboxes.new_zeros((num_points, 4), dtype=torch.float)
         bbox_weights = bboxes.new_zeros((num_points, 4), dtype=torch.float)
 
@@ -247,17 +247,17 @@ class RepPointsRPNHead(AnchorFreeHead):
         neg_inds = sampling_result.neg_inds
 
         if len(pos_inds) > 0:
-            labels[pos_inds] = 0  # For RPN binary classification
+            s[pos_inds] = 0  # For RPN binary classification
             bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes.tensor
             bbox_weights[pos_inds, :] = 1.0
 
         if len(neg_inds) > 0:
-            label_weights[neg_inds] = 1.0
+            _weights[neg_inds] = 1.0
 
         # Split targets back per feature level based on points length for each level
         start_idx = 0
-        labels_list = []
-        label_weights_list = []
+        s_list = []
+        _weights_list = []
         bbox_gt_list = []
         bbox_weights_list = []
 
