@@ -154,7 +154,7 @@ class BiFPN(nn.Module):
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
 
-        print(f"Neck output shapes: {[f.shape for f in outs]}")
+        # print(f"Neck output shapes: {[f.shape for f in outs]}")
 
         return tuple(outs)
 
