@@ -106,9 +106,9 @@ class TwoStageDetector(BaseDetector):
           x = self.backbone(batch_inputs)
           if self.with_neck:
               x = self.neck(x)
-              print("Neck output shapes:", [feat.shape for feat in x])
-          else:
-              print("No neck used")
+              # print("Neck output shapes:", [feat.shape for feat in x])
+          # else:
+          #     print("No neck used")
           return x
 
     def _forward(self, batch_inputs: Tensor,
@@ -161,11 +161,11 @@ class TwoStageDetector(BaseDetector):
 
     def loss(self, batch_inputs: Tensor, batch_data_samples: SampleList) -> dict:
         """Calculate losses from a batch of inputs and data samples."""
-        print(f"Type of batch_data_samples: {type(batch_data_samples)}")
+        # print(f"Type of batch_data_samples: {type(batch_data_samples)}")
         
         # Unwrap if batch_data_samples itself is a tuple
         if isinstance(batch_data_samples, tuple):
-            print(f"Length of tuple batch_data_samples: {len(batch_data_samples)}")
+            # print(f"Length of tuple batch_data_samples: {len(batch_data_samples)}")
             batch_data_samples = batch_data_samples[0]
 
         # Unwrap inner elements if they are tuples
@@ -173,10 +173,10 @@ class TwoStageDetector(BaseDetector):
             data_sample[0] if isinstance(data_sample, tuple) else data_sample
             for data_sample in batch_data_samples
         ]
-        print(f"Type after adjustment: {type(batch_data_samples)}")
-        print("DEBUG: batch_data_samples type:", type(batch_data_samples))
-        print("DEBUG: First entry type:", type(batch_data_samples[0]))
-        print("DEBUG: First entry contents:", batch_data_samples[0])
+        # print(f"Type after adjustment: {type(batch_data_samples)}")
+        # print("DEBUG: batch_data_samples type:", type(batch_data_samples))
+        # print("DEBUG: First entry type:", type(batch_data_samples[0]))
+        # print("DEBUG: First entry contents:", batch_data_samples[0])
 
         x = self.extract_feat(batch_inputs)
         losses = dict()
