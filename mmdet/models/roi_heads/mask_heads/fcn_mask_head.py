@@ -140,6 +140,7 @@ class FCNMaskHead(BaseModule):
         Returns:
             Tensor: Predicted foreground masks.
         """
+        print("FCN mask head forward called", flush=True)
         for conv in self.convs:
             x = conv(x)
         if self.upsample is not None:
@@ -194,6 +195,7 @@ class FCNMaskHead(BaseModule):
         Returns:
             dict: A dictionary of loss and targets components.
         """
+        print("FCN mask head loss_and_target called", flush=True)
         mask_targets = self.get_targets(
             sampling_results=sampling_results,
             batch_gt_instances=batch_gt_instances,
@@ -201,14 +203,14 @@ class FCNMaskHead(BaseModule):
 
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
 
-        print("Target shape (in FCN Mask Head):", mask_targets.shape)
-        print("Prediction shape (In FCN Mask Head):", mask_preds.shape)
+        print("Target shape (in FCN Mask Head):", mask_targets.shape, flush=True)
+        print("Prediction shape (In FCN Mask Head):", mask_preds.shape, flush=True)
 
         if mask_targets.dim() == 3:
             mask_targets = mask_targets.unsqueeze(1)
 
-        print("Resized Target shape (in FCN Mask Head):", mask_targets.shape)
-        print("Prediction shape (In FCN Mask Head):", mask_preds.shape)
+        print("Resized Target shape (in FCN Mask Head):", mask_targets.shape, flush=True)
+        print("Prediction shape (In FCN Mask Head):", mask_preds.shape, flush=True)
 
         loss = dict()
         if mask_preds.size(0) == 0:
@@ -231,6 +233,7 @@ class FCNMaskHead(BaseModule):
                         rcnn_test_cfg: ConfigDict,
                         rescale: bool = False,
                         activate_map: bool = False) -> InstanceList:
+        print("FCN mask head predict_by_feat called", flush=True)
         """Transform a batch of output features extracted from the head into
         mask results.
 
