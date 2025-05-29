@@ -75,14 +75,14 @@ model = dict(
     backbone=dict(
         type='mmdet.EfficientNet',
         arch='b3',
-        out_indices=(1, 2, 3, 4),  # Correct stages for channel dimensions
+        out_indices=(2, 3, 4, 5),  # Correct stages for channel dimensions
         norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.01, eps=1e-3),
         norm_eval=False,
         frozen_stages=0
     ),
     neck=dict(
         type='mmdet.BiFPN',
-        in_channels=[24, 48, 136, 384],  # Must match EfficientNet-b3 stages
+        in_channels=[32, 48, 136, 384],  # Must match EfficientNet-b3 stages
         out_channels=256,  # This will feed into RPN head
         num_outs=5,
         stack=2,
@@ -98,8 +98,8 @@ model = dict(
         point_feat_channels=256,
         num_points=9,
         gradient_mul=0.1,
-        point_strides=[8, 16, 32, 64, 128],
-        point_base_scale=4,
+        point_strides=[4, 8, 16, 32, 64],
+        point_base_scale=2,
         loss_cls=dict(
             type='mmdet.CrossEntropyLoss',
             use_sigmoid=True,
@@ -108,7 +108,7 @@ model = dict(
             type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=0.5),
         loss_bbox_refine=dict(
             type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=1.0),
-        transform_method='moment',
+        transform_method='minmax',
         topk=1000,
         num_classes=1,  # Must be 1 for RPN
         train_cfg=dict(
@@ -150,7 +150,7 @@ model = dict(
                 sampling_ratio=2
             ),
             out_channels=256,  # Must match neck output channels
-            featmap_strides=[8, 16, 32, 64, 128],
+            featmap_strides=[4, 8, 16, 32, 64],
             finest_scale=56
         ),
         bbox_head=dict(
@@ -180,7 +180,7 @@ model = dict(
                 sampling_ratio=2
             ),
             out_channels=256,  # Must match neck output channels
-            featmap_strides=[8, 16, 32, 64, 128],
+            featmap_strides=[4, 8, 16, 32, 64],
             finest_scale=56
         ),
         mask_head=dict(
