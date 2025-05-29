@@ -217,6 +217,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             bboxes.append(bboxes_per_level.squeeze(0))
         bboxes = torch.cat(bboxes, dim=0)
 
+        ious = bbox_overlaps(bboxes, gt_instances.bboxes)
+        print("IoU stats: min", ious.min().item(), "max", ious.max().item(), "mean", ious.mean().item())
+
         pred_instances = InstanceData(priors=bboxes)
 
         # Validate gt_instances bboxes and labels
@@ -270,6 +273,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_gt_list.append(bbox_gt[start_idx:end_idx])
             bbox_weights_list.append(bbox_weights[start_idx:end_idx])
             start_idx = end_idx
+
+        print("Sample prior bbox:", bboxes[0].cpu().detach().numpy())
+        print("Sample GT bbox:", gt_instances.bboxes[0].cpu().detach().numpy())
 
         print(f"[get_targets_single] GT bboxes: {gt_instances.bboxes.shape if hasattr(gt_instances, 'bboxes') else None}")
         print(f"[get_targets_single] pos_inds: {len(pos_inds)}, neg_inds: {len(neg_inds)}")
@@ -660,6 +666,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         
         """Calculate the loss."""
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+        print("[DEBUG] Feature map sizes:", featmap_sizes)
         device = cls_scores[0].device
 
         # Get point centers

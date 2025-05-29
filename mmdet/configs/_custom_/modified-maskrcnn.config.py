@@ -1,7 +1,7 @@
 # Enhanced training configuration
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=24,  # Extended for better convergence
+    max_epochs=1,  # Extended for better convergence
     val_interval=1,
     dynamic_intervals=[(20, 1)]  # More frequent late-stage validation
 )
@@ -78,16 +78,11 @@ model = dict(
         out_indices=(1, 2, 3, 4),  # Correct stages for channel dimensions
         norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.01, eps=1e-3),
         norm_eval=False,
-        frozen_stages=0,
-        # init_cfg=dict(
-        #     type='Pretrained',
-        #     checkpoint='https://download.openmmlab.com/mmdetection/v3.0/efficientdet/efficientdet_effb3_bifpn_8xb16-crop896-300e_coco/efficientdet_effb3_bifpn_8xb16-crop896-300e_coco_20230223_122457-e6f7a833.pth',
-        #     prefix='backbone.'
-        # )
+        frozen_stages=0
     ),
     neck=dict(
         type='mmdet.BiFPN',
-        in_channels=[24, 32, 48, 136],  # Must match EfficientNet-b3 stages 2,3,4
+        in_channels=[24, 48, 136, 384],  # Must match EfficientNet-b3 stages
         out_channels=256,  # This will feed into RPN head
         num_outs=5,
         stack=2,
@@ -210,6 +205,7 @@ model = dict(
 data_root = '/content/GroupEGS-Thesis-Dataset/'
 classes = (
     'damage-crack', 'damage-dent', 'damage-scratch', 'damage-tear',
+    'depth-deep', 'depth-shallow',  # <-- add these two here
     'panel-apillar', 'panel-bonnet', 'panel-bpillar',
     'panel-cpillar', 'panel-dpillar', 'panel-fender',
     'panel-frontdoor', 'panel-qpanel', 'panel-reardoor',
@@ -236,16 +232,14 @@ img_norm_cfg = dict(
 
 train_pipeline = [
     dict(type='mmdet.LoadImageFromFile'),
-    dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
-    dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(2, 2), keep_empty=False),
+    dict(type='mmdet.LoadAnnotations', with_bbox=True, with_label=True, with_mask=True),
     dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
-    dict(type='mmdet.RandomFlip', prob=0.5),
-    dict(type='mmdet.EfficientNetPreprocessor', 
+    dict(type='mmdet.EfficientNetPreprocessor',
          size_divisor=32,
          mean=img_norm_cfg['mean'],
          std=img_norm_cfg['std'],
          to_rgb=img_norm_cfg['to_rgb']),
-    dict(type='mmdet.DebugInput'),
+    dict(type='RenameGtLabels'),
     dict(
         type='mmdet.TensorPackDetInputs',
         meta_keys=('img_id', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
@@ -255,13 +249,13 @@ train_pipeline = [
 train_dataloader = dict(
     batch_size=1,  # Will stack into (B, C, H, W)
     num_workers=2,
-    persistent_workers=False,
+    persistent_workers=True,
     sampler=dict(type='mmdet.DefaultSampler', shuffle=True),
     dataset=dict(
         type='mmdet.CocoDataset',
         data_root=data_root,
-        ann_file='train/_annotations_cleaned_final.coco.json',
-        data_prefix=dict(img='train/'),
+        ann_file='/content/GroupEGS-Thesis-Dataset/train/_annotations_cleaned_final.coco.json',
+        data_prefix=dict(img='/content/GroupEGS-Thesis-Dataset/train/'),
         metainfo=metainfo,
         filter_cfg=dict(filter_empty_gt=True, min_size=32),
         pipeline=train_pipeline
@@ -278,35 +272,36 @@ val_dataloader = dict(
     dataset=dict(
         type='mmdet.CocoDataset',
         data_root=data_root,
-        ann_file='valid/_annotations_cleaned_final.coco.json',
-        data_prefix=dict(img='valid/'),
+        ann_file='/content/GroupEGS-Thesis-Dataset/valid/_annotations_cleaned_final.coco.json',
+        data_prefix=dict(img='/content/GroupEGS-Thesis-Dataset/valid/'),
         metainfo=metainfo,
         filter_cfg=dict(filter_empty_gt=True),
         pipeline=[
             dict(type='mmdet.LoadImageFromFile'),
-            dict(type='mmdet.LoadAnnotations', with_bbox=True, with_mask=True),
+            dict(type='mmdet.LoadAnnotations', with_bbox=True, with_label=True, with_mask=True),
             dict(type='mmdet.Resize', scale=(896, 896), keep_ratio=True),
             dict(type='mmdet.EfficientNetPreprocessor',
                  size_divisor=32,
                  mean=img_norm_cfg['mean'],
                  std=img_norm_cfg['std'],
                  to_rgb=img_norm_cfg['to_rgb']),
+            dict(type='RenameGtLabels'),
             dict(
                 type='mmdet.TensorPackDetInputs',
-                meta_keys=('img_id', 'img_shape', 'bbox', 'segm', 'ori_shape', 'scale_factor')
+                meta_keys=('img_id', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
             )
         ]
     )
 )
 
 test_dataloader = val_dataloader.copy()
-test_dataloader['dataset']['ann_file'] = data_root + 'test/_annotations_cleaned_final.coco.json'
-test_dataloader['dataset']['data_prefix'] = dict(img=data_root + 'test/')
+test_dataloader['dataset']['ann_file'] = '/content/GroupEGS-Thesis-Dataset/test/_annotations_cleaned_final.coco.json'
+test_dataloader['dataset']['data_prefix'] = dict(img='/content/GroupEGS-Thesis-Dataset/test/')
 
 # Enhanced evaluation
 val_evaluator = dict(
     type='mmdet.CocoMetric',
-    ann_file=data_root + 'valid/_annotations_cleaned_final.coco.json',
+    ann_file='/content/GroupEGS-Thesis-Dataset/valid/_annotations_cleaned_final.coco.json',
     metric=['bbox', 'segm'],
     classwise=True,
     iou_thrs=[0.5, 0.75],  # Added stricter IoU threshold
@@ -314,7 +309,7 @@ val_evaluator = dict(
 )
 
 test_evaluator = val_evaluator.copy()
-test_evaluator['ann_file'] = data_root + 'test/_annotations_cleaned_final.coco.json'
+test_evaluator['ann_file'] = '/content/GroupEGS-Thesis-Dataset/test/_annotations_cleaned_final.coco.json'
 
 # Optimized training configuration
 optim_wrapper = dict(
@@ -358,7 +353,7 @@ default_hooks = dict(
     timer=dict(type='mmdet.IterTimerHook'),
     logger=dict(
         type='mmdet.LoggerHook',
-        interval=50,
+        interval=1,
         log_metric_by_epoch=True
     ),
     param_scheduler=dict(type='mmdet.ParamSchedulerHook'),
@@ -371,7 +366,7 @@ default_hooks = dict(
     sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
     visualization=dict(
         type='mmdet.DetVisualizationHook',
-        interval=10,
+        interval=1,
         draw=True
     ),
     early_stop=dict(
@@ -389,7 +384,7 @@ env_cfg = dict(
     gc_collect_threshold=0.7  # Better memory management
 )
 
-log_level = 'INFO'
+log_level = 'INFO' #==> DEBUG, INFO
 log_processor = dict(type='LogProcessor', window_size=50, by_epoch=True)
 load_from = None
 resume = False
