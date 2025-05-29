@@ -177,10 +177,10 @@ class TensorPackDetInputs:
 class DebugInput:
     def __call__(self, results):
         img = results['img']
-        print(f"Final input - Shape: {img.shape}", flush=True)
-        print(f"Channel means: {img.mean(dim=[1,2])}", flush=True)
-        print(f"Keys in results: {list(results.keys())}", flush=True)
-        print(f"Meta info preview: {[k for k in ['img_id', 'img_shape', 'ori_shape', 'scale_factor'] if k in results]}", flush=True)
+        # print(f"Final input - Shape: {img.shape}", flush=True)
+        # print(f"Channel means: {img.mean(dim=[1,2])}", flush=True)
+        # print(f"Keys in results: {list(results.keys())}", flush=True)
+        # print(f"Meta info preview: {[k for k in ['img_id', 'img_shape', 'ori_shape', 'scale_factor'] if k in results]}", flush=True)
         return results
 
 def parse_args():
