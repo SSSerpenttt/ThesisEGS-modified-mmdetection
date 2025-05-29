@@ -100,9 +100,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             **kwargs)
 
         self.assigner = TASK_UTILS.build(dict(type='mmdet.MaxIoUAssigner',
-                                     pos_iou_thr=0.7,
+                                     pos_iou_thr=0.4,
                                      neg_iou_thr=0.3,
-                                     min_pos_iou=0.3,
+                                     min_pos_iou=0.2,
                                      ignore_iof_thr=-1,
                                      match_low_quality=True,
                                      iou_calculator=dict(type='mmdet.BboxOverlaps2D')))
@@ -138,6 +138,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                     return_sampling_results: bool = False) -> tuple:
         """Compute regression and classification targets for points."""
         # print("In: get_targets")
+        print(f"[get_targets] stage: {stage}, num images: {len(points)}")
 
         # Normalize image meta info
         img_metas = [{
@@ -190,7 +191,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         points_flat = torch.cat(points_flat, dim=0)
 
         avg_factor = sum(pos_counts)
-
+        print(f"[get_targets] avg_factor: {avg_factor}, num pos: {[p for p in pos_counts]}")
         if return_sampling_results:
             # Optionally return sampling results if needed downstream
             return labels, label_weights, bbox_gt, points_flat, bbox_weights, avg_factor, results[-1]
@@ -205,6 +206,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                             gt_instances_ignore: Optional[InstanceData] = None,
                             stage: str = 'init') -> tuple:
         """Compute targets for a single image."""
+        print(f"[get_targets_single] stage: {stage}, num points: {sum([len(p) for p in points])}")
 
         # Convert points to bboxes
         bboxes = []
@@ -269,6 +271,8 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_weights_list.append(bbox_weights[start_idx:end_idx])
             start_idx = end_idx
 
+        print(f"[get_targets_single] GT bboxes: {gt_instances.bboxes.shape if hasattr(gt_instances, 'bboxes') else None}")
+        print(f"[get_targets_single] pos_inds: {len(pos_inds)}, neg_inds: {len(neg_inds)}")
         return (labels_list, label_weights_list, bbox_gt_list, points, bbox_weights_list, len(pos_inds))
 
 
@@ -644,6 +648,9 @@ class RepPointsRPNHead(AnchorFreeHead):
         center_list = list(map(list, zip(*mlvl_center_list)))
         valid_flag_list = list(map(list, zip(*mlvl_valid_flag_list)))
 
+        print(f"[get_points] featmap_sizes: {featmap_sizes}, num images: {len(img_metas_dict)}")
+        print(f"[get_points] center_list lens: {[len(lvl) for lvl in center_list]}")
+        print(f"[get_points] valid_flag_list lens: {[len(lvl) for lvl in valid_flag_list]}")
         return center_list, valid_flag_list
 
 
@@ -710,6 +717,8 @@ class RepPointsRPNHead(AnchorFreeHead):
             avg_factor_init=avg_factor_init_sum,
             avg_factor_refine=avg_factor_refine_sum)
 
+        print(f"[loss] cls_scores lens: {len(cls_scores)}, pts_preds_init lens: {len(pts_preds_init)}, pts_preds_refine lens: {len(pts_preds_refine)}")
+        print(f"[loss] avg_factor_init_sum: {avg_factor_init_sum}, avg_factor_refine_sum: {avg_factor_refine_sum}")
         return dict(
             loss_rpn_cls=losses_cls,
             loss_rpn_pts_init=losses_pts_init,
@@ -723,6 +732,8 @@ class RepPointsRPNHead(AnchorFreeHead):
                     stride: int, avg_factor_init: int, avg_factor_refine: int
                     ) -> Tuple[Tensor, Tensor, Tensor]:
 
+        print(f"[loss_single] cls_score shape: {cls_score.shape}, pts_pred_init shape: {pts_pred_init.shape}, pts_pred_refine shape: {pts_pred_refine.shape}")
+
         # ----- Classification Loss -----
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
 
@@ -730,6 +741,10 @@ class RepPointsRPNHead(AnchorFreeHead):
         label_weights = torch.cat(label_weights, dim=0).reshape(-1) if isinstance(label_weights, (list, tuple)) else label_weights.reshape(-1)
 
         valid_class_idx = (label_weights > 0).nonzero(as_tuple=False).view(-1)
+
+        # Debug: Print classes
+        print("GT classes:", labels.cpu().numpy())
+        print("Pred classes (logits):", cls_score.detach().cpu().numpy())
 
         if valid_class_idx.numel() > 0:
             cls_score = cls_score[valid_class_idx]
@@ -750,6 +765,14 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         pred_bboxes_init = pts_pred_init.reshape(-1, 4)
         pred_bboxes_refine = pts_pred_refine.reshape(-1, 4)
+
+        # Debug: Print GT and predicted boxes and points
+        print("GT boxes (init):", gt_bboxes_init.cpu().numpy())
+        print("Pred boxes (init):", pred_bboxes_init.detach().cpu().numpy())
+        print("GT boxes (refine):", gt_bboxes_refine.cpu().numpy())
+        print("Pred boxes (refine):", pred_bboxes_refine.detach().cpu().numpy())
+        print("Pred points (init):", pts_pred_init.detach().cpu().numpy())
+        print("Pred points (refine):", pts_pred_refine.detach().cpu().numpy())
 
         min_len_init = min(pred_bboxes_init.size(0), gt_bboxes_init.size(0), gt_weights_init.size(0))
         pred_bboxes_init = pred_bboxes_init[:min_len_init]
@@ -786,6 +809,13 @@ class RepPointsRPNHead(AnchorFreeHead):
             gt_weights_refine,
             avg_factor=float(avg_factor_refine)
         )
+
+        print(f"[loss_single] labels shape: {labels.shape}, label_weights shape: {label_weights.shape}")
+        print(f"[loss_single] valid_class_idx: {valid_class_idx.shape}, num valid: {valid_class_idx.numel()}")
+        print(f"[loss_single] GT boxes (init): {gt_bboxes_init.shape}, GT boxes (refine): {gt_bboxes_refine.shape}")
+        print(f"[loss_single] pred_bboxes_init: {pred_bboxes_init.shape}, pred_bboxes_refine: {pred_bboxes_refine.shape}")
+        print(f"[loss_single] gt_weights_init sum: {gt_weights_init.sum().item()}, gt_weights_refine sum: {gt_weights_refine.sum().item()}")
+        print(f"[loss_single] valid_init: {valid_init.sum().item()}, valid_refine: {valid_refine.sum().item()}")
 
         return loss_cls, loss_pts_init, loss_pts_refine
 
