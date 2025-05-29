@@ -309,7 +309,7 @@ def filter_scores_and_topk(scores, score_thr, topk, results=None):
     """Filter results using score threshold and topk candidates.
 
     Args:
-        scores (Tensor): The scores, shape (num_bboxes, K).
+        scores (Tensor): The scores, shape (num_bboxes, K) or (num_bboxes,).
         score_thr (float): The score filter threshold.
         topk (int): The number of topk candidates.
         results (dict or list or Tensor, Optional): The results to
@@ -321,8 +321,8 @@ def filter_scores_and_topk(scores, score_thr, topk, results=None):
 
             - scores (Tensor): The scores after being filtered, \
                 shape (num_bboxes_filtered, ).
-            - labels (Tensor): The class labels, shape \
-                (num_bboxes_filtered, ).
+            - labels (Tensor or None): The class labels, shape \
+                (num_bboxes_filtered, ). None for single-class.
             - anchor_idxs (Tensor): The anchor indexes, shape \
                 (num_bboxes_filtered, ).
             - filtered_results (dict or list or Tensor, Optional): \
@@ -331,14 +331,22 @@ def filter_scores_and_topk(scores, score_thr, topk, results=None):
     """
     valid_mask = scores > score_thr
     scores = scores[valid_mask]
-    valid_idxs = torch.nonzero(valid_mask)
+    valid_idxs = torch.nonzero(valid_mask, as_tuple=False)
 
     num_topk = min(topk, valid_idxs.size(0))
     # torch.sort is actually faster than .topk (at least on GPUs)
     scores, idxs = scores.sort(descending=True)
     scores = scores[:num_topk]
     topk_idxs = valid_idxs[idxs[:num_topk]]
-    keep_idxs, labels = topk_idxs.unbind(dim=1)
+
+    # Handle both multiclass and single-class (RPN) cases
+    if topk_idxs.dim() == 2 and topk_idxs.size(1) == 2:
+        # Multiclass: (idx, label)
+        keep_idxs, labels = topk_idxs.unbind(dim=1)
+    else:
+        # Single-class: (idx,)
+        keep_idxs = topk_idxs.squeeze(1) if topk_idxs.dim() == 2 else topk_idxs
+        labels = None
 
     filtered_results = None
     if results is not None:

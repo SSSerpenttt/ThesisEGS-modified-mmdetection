@@ -106,7 +106,7 @@ class TwoStageDetector(BaseDetector):
           x = self.backbone(batch_inputs)
           if self.with_neck:
               x = self.neck(x)
-              # print("Neck output shapes:", [feat.shape for feat in x])
+            #   print("Neck output shapes:", [feat.shape for feat in x])
           # else:
           #     print("No neck used")
           return x
@@ -218,37 +218,45 @@ class TwoStageDetector(BaseDetector):
 
 
     def predict(self, batch_inputs: Tensor, batch_data_samples: SampleList, **kwargs) -> list:
-        """Perform forward propagation during prediction.
-    
-        Args:
-            batch_inputs (Tensor): The input tensor with shape (N, C, H, W).
-            batch_data_samples (List[DetDataSample] or nested tuples): Meta info and annotations.
-    
-        Returns:
-            list: List of detection results.
-        """
         # Unwrap outer tuple if needed
         if isinstance(batch_data_samples, tuple):
             batch_data_samples = batch_data_samples[0]
-    
-        # Unwrap each item if it's a tuple
-        batch_data_samples = [
-            data_sample[0] if isinstance(data_sample, tuple) else data_sample
-            for data_sample in batch_data_samples
-        ]
-    
+
+        # Flatten and unwrap any nested lists/tuples
+        flat_samples = []
+        for sample in batch_data_samples:
+            if isinstance(sample, (list, tuple)):
+                sample = sample[0]
+            flat_samples.append(sample)
+        batch_data_samples = flat_samples
+
         x = self.extract_feat(batch_inputs)
-    
+
         if self.with_rpn:
             rpn_outputs = self.rpn_head.forward(x)
             cls_scores, bbox_preds = rpn_outputs
             proposals = self.rpn_head.get_proposals(cls_scores, bbox_preds, batch_data_samples)
+            # for p in proposals:
+            #     print("DEBUG: proposals bboxes shape:", p.bboxes.shape)
+            #     print("DEBUG: proposals scores:", getattr(p, 'scores', None))
         else:
             proposals = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
-    
-        results_list = self.roi_head.predict(x, proposals, batch_data_samples, rescale=True)
-    
-        return results_list
 
+        results_list = self.roi_head.predict(x, proposals, batch_data_samples, rescale=True)
+
+        # --- PATCH: Return DetDataSample objects with pred_instances and meta info ---
+        wrapped_results = []
+        for result, data_sample in zip(results_list, batch_data_samples):
+            # Always create a new DetDataSample to avoid mutation
+            det_sample = DetDataSample()
+            # Copy meta info (img_path, ori_shape, etc.)
+            if hasattr(data_sample, 'metainfo'):
+                det_sample.set_metainfo(data_sample.metainfo)
+            elif isinstance(data_sample, dict):
+                det_sample.set_metainfo(data_sample)
+            # Set prediction results
+            det_sample.pred_instances = result
+            wrapped_results.append(det_sample)
+        return wrapped_results

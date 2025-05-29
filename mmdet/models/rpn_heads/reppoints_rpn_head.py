@@ -41,40 +41,41 @@ class RepPointsRPNHead(AnchorFreeHead):
     """
 
     def __init__(self,
-                 in_channels: int,
-                 point_feat_channels: int = 256,
-                 num_points: int = 9,
-                 gradient_mul: float = 0.1,
-                 point_strides: Sequence[int] = [8, 16, 32, 64, 128],
-                 point_base_scale: int = 4,
-                 loss_cls: ConfigType = dict(
-                     type='CrossEntropyLoss',
-                     use_sigmoid=True,
-                     loss_weight=1.0),
-                 loss_bbox_init: ConfigType = dict(
-                     type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=0.5),
-                 loss_bbox_refine: ConfigType = dict(
-                     type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0),
-                 transform_method: str = 'moment',
-                 moment_mul: float = 0.01,
-                 topk: int = 1000,
-                 num_classes: int = 1,
-                 init_cfg: MultiConfig = dict(
-                     type='Normal',
-                     layer='Conv2d',
-                     std=0.01,
-                     override=dict(
-                         type='Normal',
-                         name='reppoints_cls_out',
-                         std=0.01,
-                         bias_prob=0.01)),
-                 **kwargs) -> None:
+                in_channels: int,
+                point_feat_channels: int = 256,
+                num_points: int = 9,
+                gradient_mul: float = 0.1,
+                point_strides: Sequence[int] = [8, 16, 32, 64, 128],
+                point_base_scale: int = 4,
+                loss_cls: ConfigType = dict(
+                    type='CrossEntropyLoss',
+                    use_sigmoid=True,
+                    loss_weight=1.0),
+                loss_bbox_init: ConfigType = dict(
+                    type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=0.5),
+                loss_bbox_refine: ConfigType = dict(
+                    type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0),
+                transform_method: str = 'moment',
+                moment_mul: float = 0.01,
+                topk: int = 1000,
+                num_classes: int = 1,
+                init_cfg: MultiConfig = dict(
+                    type='Normal',
+                    layer='Conv2d',
+                    std=0.01,
+                    override=dict(
+                        type='Normal',
+                        name='reppoints_cls_out',
+                        std=0.01,
+                        bias_prob=0.01)),
+                **kwargs) -> None:
         
         # RPN is binary classification (object vs background)
         self.num_points = num_points
         self.point_feat_channels = point_feat_channels
         self.use_grid_points = False  # Always False for RPN
         self.center_init = True  # Always True for RPN
+        self.point_strides = point_strides
         
         # Deformable convolution setup
         self.dcn_kernel = int(np.sqrt(num_points))
@@ -98,14 +99,16 @@ class RepPointsRPNHead(AnchorFreeHead):
             loss_cls=loss_cls,
             init_cfg=init_cfg,
             **kwargs)
+        
+        self.prior_generator = MlvlPointGenerator(self.point_strides, offset=0.)
 
         self.assigner = TASK_UTILS.build(dict(type='mmdet.MaxIoUAssigner',
-                                     pos_iou_thr=0.1,
-                                     neg_iou_thr=0.05,
-                                     min_pos_iou=0,
-                                     ignore_iof_thr=-1,
-                                     match_low_quality=True,
-                                     iou_calculator=dict(type='mmdet.BboxOverlaps2D')))
+                                    pos_iou_thr=0.1,
+                                    neg_iou_thr=0.05,
+                                    min_pos_iou=0,
+                                    ignore_iof_thr=-1,
+                                    match_low_quality=True,
+                                    iou_calculator=dict(type='mmdet.BboxOverlaps2D')))
         self.sampler = PseudoSampler()  # Or another sampler if you prefer
         
         self._init_layers()
@@ -113,7 +116,6 @@ class RepPointsRPNHead(AnchorFreeHead):
         self.gradient_mul = gradient_mul
         self.point_base_scale = point_base_scale
         self.point_strides = point_strides
-        self.prior_generator = MlvlPointGenerator(self.point_strides, offset=0.)
         self.topk = topk
         
         # For RPN we always use sigmoid classification
@@ -442,7 +444,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         
         # Refine and classify reppoints
         pts_out_init_grad_mul = (1 - self.gradient_mul) * pts_out_init.detach() + \
-                               self.gradient_mul * pts_out_init
+                            self.gradient_mul * pts_out_init
         
         # Use only first 18 channels for DCN offset (x/y for 9 points)
         dcn_offset = pts_out_init_grad_mul[:, :18, :, :] - dcn_base_offset
@@ -464,8 +466,8 @@ class RepPointsRPNHead(AnchorFreeHead):
         if self.training:
             return cls_out, pts_out_init, pts_out_refine
         else:
-            # For inference, return classification scores and bbox predictions
-            return cls_out, self.points2bbox(pts_out_refine)
+            # For inference, return classification scores and raw bbox predictions
+            return cls_out, pts_out_refine
 
 
     def points2bbox(self, pts: Tensor, y_first: bool = True) -> Tensor:
@@ -520,7 +522,7 @@ class RepPointsRPNHead(AnchorFreeHead):
             pts_x_std = torch.std(pts_x - pts_x_mean, dim=1, keepdim=True)
 
             moment_transfer = (self.moment_transfer * self.moment_mul) + \
-                              (self.moment_transfer.detach() * (1 - self.moment_mul))
+                            (self.moment_transfer.detach() * (1 - self.moment_mul))
             moment_width_transfer = moment_transfer[0]
             moment_height_transfer = moment_transfer[1]
 
@@ -799,28 +801,33 @@ class RepPointsRPNHead(AnchorFreeHead):
 
 
     def get_bboxes(self, cls_scores: List[Tensor], pts_preds_refine: List[Tensor],
-                  batch_img_metas: List[dict], cfg: ConfigDict = None,
-                  rescale: bool = False, with_nms: bool = True) -> InstanceList:
+                batch_img_metas: List[dict], cfg: ConfigDict = None,
+                rescale: bool = False, with_nms: bool = True) -> InstanceList:
+        # print("DEBUG: get_bboxes called")
+        # print("DEBUG: len(cls_scores) =", len(cls_scores))
+        # print("DEBUG: len(pts_preds_refine) =", len(pts_preds_refine))
         """Transform network outputs of a batch into bbox results."""
         assert len(cls_scores) == len(pts_preds_refine)
         cfg = self.test_cfg if cfg is None else cfg
-        
-        num_levels = len(cls_scores)
-        mlvl_priors = [
-            self.prior_generator.grid_priors(
-                cls_scores[i].shape[-2:],
-                self.point_strides[i],
-                device=cls_scores[i].device) for i in range(num_levels)
-        ]
-        
+
+        # FIX: Get all feature map sizes and call grid_priors ONCE
+        featmap_sizes = [cs.shape[-2:] for cs in cls_scores]
+        mlvl_priors = self.prior_generator.grid_priors(
+            featmap_sizes,
+            device=cls_scores[0].device
+        )
+
         result_list = []
         for img_id in range(len(batch_img_metas)):
             img_meta = batch_img_metas[img_id]
+            # Fix: if img_meta is a list, get the first element
+            if isinstance(img_meta, list):
+                img_meta = img_meta[0]
             cls_score_list = [
-                cls_scores[i][img_id].detach() for i in range(num_levels)
-            ]  # Fixed: Added missing closing bracket
+                cls_scores[i][img_id].detach() for i in range(len(cls_scores))
+            ]
             bbox_pred_list = [
-                pts_preds_refine[i][img_id].detach() for i in range(num_levels)]
+                pts_preds_refine[i][img_id].detach() for i in range(len(pts_preds_refine))]
             
             results = self._get_bboxes_single(
                 cls_score_list, bbox_pred_list, mlvl_priors, img_meta, cfg,
@@ -829,14 +836,18 @@ class RepPointsRPNHead(AnchorFreeHead):
             
         return result_list
 
+
     def _get_bboxes_single(self, cls_score_list: List[Tensor],
-                           bbox_pred_list: List[Tensor],
-                           mlvl_priors: List[Tensor], img_meta: dict,
-                           cfg: ConfigDict, rescale: bool = False,
-                           with_nms: bool = True) -> InstanceData:
+                        bbox_pred_list: List[Tensor],
+                        mlvl_priors: List[Tensor], img_meta: dict,
+                        cfg: ConfigDict, rescale: bool = False,
+                        with_nms: bool = True) -> InstanceData:
         """Transform outputs of a single image into bbox predictions."""
         cfg = self.test_cfg if cfg is None else cfg
-        img_shape = img_meta['img_shape']
+        if hasattr(img_meta, 'metainfo'):
+            img_shape = img_meta.metainfo.get('img_shape', None)
+        else:
+            img_shape = img_meta.get('img_shape', None)
         nms_pre = cfg.get('nms_pre', -1)
         
         mlvl_bboxes = []
@@ -844,7 +855,8 @@ class RepPointsRPNHead(AnchorFreeHead):
         
         for level_idx, (cls_score, bbox_pred, priors) in enumerate(
                 zip(cls_score_list, bbox_pred_list, mlvl_priors)):
-            
+
+            # print(f"[DEBUG] Level {level_idx}: cls_score.shape={cls_score.shape}, bbox_pred.shape={bbox_pred.shape}")
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             
             # Reshape predictions
@@ -858,27 +870,52 @@ class RepPointsRPNHead(AnchorFreeHead):
             results = filter_scores_and_topk(
                 scores, cfg.score_thr, nms_pre,
                 dict(bbox_pred=bbox_pred, priors=priors))
-            
-            scores, _, _, filtered_results = results
-            bbox_pred = filtered_results['bbox_pred']
-            priors = filtered_results['priors']
+
+            # Robust unpacking for RPN (single-class) and multi-class
+            if isinstance(results, tuple) and len(results) == 4:
+                # RPN/single-class: (scores, keep_idxs, _, filtered_results)
+                scores, keep_idxs, _, filtered_results = results
+                bbox_pred = filtered_results['bbox_pred']
+                priors = filtered_results['priors']
+                labels = torch.zeros_like(scores, dtype=torch.long)
+            elif isinstance(results, tuple) and len(results) == 5:
+                # Multi-class: (scores, labels, keep_idxs, filtered_results, ...)
+                scores, labels, keep_idxs, filtered_results, _ = results
+                bbox_pred = filtered_results['bbox_pred']
+                priors = filtered_results['priors']
+            else:
+                # Multi-class: (scores, labels, keep_idxs, filtered_results)
+                scores, labels, keep_idxs, filtered_results = results
+                bbox_pred = filtered_results['bbox_pred']
+                priors = filtered_results['priors']
             
             # Decode bbox predictions
             bboxes = self._bbox_decode(priors, bbox_pred, 
-                                      self.point_strides[level_idx],
-                                      img_shape)
+                                    self.point_strides[level_idx],
+                                    img_shape)
             
             mlvl_bboxes.append(bboxes)
             mlvl_scores.append(scores)
+            if 'labels' not in locals():
+                labels = torch.zeros_like(scores, dtype=torch.long)
+            if level_idx == 0:
+                mlvl_labels = labels
+            else:
+                mlvl_labels = torch.cat([mlvl_labels, labels], dim=0)
         
         # Combine predictions from all levels
         mlvl_bboxes = torch.cat(mlvl_bboxes)
         mlvl_scores = torch.cat(mlvl_scores)
+        mlvl_labels = mlvl_labels if 'mlvl_labels' in locals() else torch.zeros_like(mlvl_scores, dtype=torch.long)
+
+        # print("DEBUG: mlvl_bboxes shape:", mlvl_bboxes.shape)
+        # print("DEBUG: mlvl_scores shape:", mlvl_scores.shape)
         
         # Prepare results
         results = InstanceData()
         results.bboxes = HorizontalBoxes(mlvl_bboxes)
         results.scores = mlvl_scores
+        results.labels = mlvl_labels
         
         # Post-processing (NMS)
         return self._bbox_post_process(
@@ -888,57 +925,36 @@ class RepPointsRPNHead(AnchorFreeHead):
             with_nms=with_nms,
             img_meta=img_meta)
 
+
     def _bbox_decode(self, points: Tensor, bbox_pred: Tensor, stride: int,
-                     max_shape: Tuple[int, int]) -> Tensor:
-        """Decode point predictions to bounding boxes.
-        
-        Args:
-            points (Tensor): Prior points, shape (N, 2).
-            bbox_pred (Tensor): Predicted bbox distances, shape (N, num_points*4).
-            stride (int): Point stride.
-            max_shape (Tuple[int, int]): Image shape (height, width).
-            
-        Returns:
-            Tensor: Decoded bounding boxes, shape (N, 4).
-        """
-        # Reshape to (N, num_points, 4)
+                        max_shape: Tuple[int, int]) -> Tensor:
+        """Decode point predictions to bounding boxes."""
         pred_distances = bbox_pred.view(-1, self.num_points, 4)
-        
-        # Get centers from points
-        x_centers = points[:, 0].unsqueeze(1)  # (N, 1)
-        y_centers = points[:, 1].unsqueeze(1)  # (N, 1)
-        
-        # Extract distances
+        x_centers = points[:, 0].unsqueeze(1)
+        y_centers = points[:, 1].unsqueeze(1)
         left = pred_distances[:, :, 0] * stride
         top = pred_distances[:, :, 1] * stride
         right = pred_distances[:, :, 2] * stride
         bottom = pred_distances[:, :, 3] * stride
-        
-        # Convert distances to point coordinates
         x1 = x_centers - left
         y1 = y_centers - top
         x2 = x_centers + right
         y2 = y_centers + bottom
-        
-        # For each sample, take min/max coordinates among all points
         x_min, _ = x1.min(dim=1)
         y_min, _ = y1.min(dim=1)
         x_max, _ = x2.max(dim=1)
         y_max, _ = y2.max(dim=1)
-        
-        # Clamp to image boundaries
         x_min = x_min.clamp(min=0, max=max_shape[1])
         y_min = y_min.clamp(min=0, max=max_shape[0])
         x_max = x_max.clamp(min=0, max=max_shape[1])
         y_max = y_max.clamp(min=0, max=max_shape[0])
-        
-        decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
+        decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=1)  # <--- fix dim=1
         return decoded_bboxes
 
     def get_proposals(self, cls_scores: List[Tensor], pts_preds_refine: List[Tensor],
-                      batch_img_metas: List[dict]) -> InstanceList:
+                        batch_img_metas: List[dict]) -> InstanceList:
         """Get proposals during training.
-        
+
         Args:
             cls_scores (list[Tensor]): Classification scores for each level.
             pts_preds_refine (list[Tensor]): Refined points predictions.

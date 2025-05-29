@@ -158,6 +158,9 @@ class MlvlPointGenerator:
             (coord_x, coord_y, stride_w, stride_h).
         """
 
+        # print("DEBUG: self.num_levels =", self.num_levels)
+        # print("DEBUG: len(featmap_sizes) =", len(featmap_sizes))
+        # print("DEBUG: featmap_sizes =", featmap_sizes)
         assert self.num_levels == len(featmap_sizes)
         multi_level_priors = []
         for i in range(self.num_levels):

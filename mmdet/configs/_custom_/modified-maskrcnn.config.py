@@ -242,14 +242,14 @@ train_pipeline = [
     dict(type='RenameGtLabels'),
     dict(
         type='mmdet.TensorPackDetInputs',
-        meta_keys=('img_id', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
+        meta_keys=('img_id', 'img_path', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
     )
 ]
 
 train_dataloader = dict(
     batch_size=1,  # Will stack into (B, C, H, W)
-    num_workers=2,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     sampler=dict(type='mmdet.DefaultSampler', shuffle=True),
     dataset=dict(
         type='mmdet.CocoDataset',
@@ -265,8 +265,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=2,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='mmdet.DefaultSampler', shuffle=False),
     dataset=dict(
@@ -288,7 +288,7 @@ val_dataloader = dict(
             dict(type='RenameGtLabels'),
             dict(
                 type='mmdet.TensorPackDetInputs',
-                meta_keys=('img_id', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
+                meta_keys=('img_id', 'img_path', 'img_shape', 'ori_shape', 'img_shape', 'scale_factor'),
             )
         ]
     )
@@ -353,20 +353,20 @@ default_hooks = dict(
     timer=dict(type='mmdet.IterTimerHook'),
     logger=dict(
         type='mmdet.LoggerHook',
-        interval=1,
+        interval=50,
         log_metric_by_epoch=True
     ),
     param_scheduler=dict(type='mmdet.ParamSchedulerHook'),
     checkpoint=dict(
         type='mmdet.CheckpointHook',
-        interval=1,
+        interval=50,
         max_keep_ckpts=3,  # Limit checkpoint storage
         save_best='auto'
     ),
     sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
     visualization=dict(
         type='mmdet.DetVisualizationHook',
-        interval=1,
+        interval=25,
         draw=True
     ),
     early_stop=dict(
@@ -384,7 +384,7 @@ env_cfg = dict(
     gc_collect_threshold=0.7  # Better memory management
 )
 
-log_level = 'INFO' #==> DEBUG, INFO
+log_level = 'DEBUG' #==> DEBUG, INFO
 log_processor = dict(type='LogProcessor', window_size=50, by_epoch=True)
 load_from = None
 resume = False

@@ -13,73 +13,42 @@ def dice_loss(pred,
               reduction='mean',
               naive_dice=False,
               avg_factor=None):
-    """
-    Calculate the Dice Loss between `pred` and `target`.
-
-    Args:
-        pred (Tensor): Predicted probabilities, shape (N, C, H, W).
-        target (Tensor): Ground truth masks, shape (N, H, W) or (N, 1, H, W).
-        weight (Tensor, optional): Optional weight for each instance. Shape: (N,).
-        eps (float): Small value to avoid division by zero. Default: 1e-3.
-        reduction (str): Reduction method - 'none', 'mean', 'sum'. Default: 'mean'.
-        naive_dice (bool): Use naive Dice (linear denominator) if True. Default: False.
-        avg_factor (int, optional): Normalization factor. Default: None.
-
-    Returns:
-        Tensor: Dice loss.
-    """
-
-    # Ensure target is 4D: (N, 1, H, W)
-    if target.dim() == 3:
-        target = target.unsqueeze(1)  # (N, 1, H, W)
-    elif target.dim() != 4:
-        raise ValueError(f"Expected target to be 3D or 4D, but got shape {target.shape}")
-
-    # Resize target if needed
-    if target.shape[2:] != pred.shape[2:]:
-        target = torch.nn.functional.interpolate(
-            target.float(),
-            size=pred.shape[2:],  # (H_pred, W_pred)
-            mode='bilinear',
-            align_corners=False
-        )  # Now (N, 1, H_pred, W_pred)
-
-    # Expand channels to match pred
-    if pred.shape[1] > 1 and target.shape[1] == 1:
-        target = target.expand(-1, pred.shape[1], -1, -1)  # (N, C, H, W)
-
-    # Flatten input and target to (N, -1)
+    # Ensure pred and target have the same spatial shape
+    if pred.dim() == 4 and target.dim() == 3:
+        # Add channel dimension to target
+        target = target.unsqueeze(1)
+    elif pred.dim() == 3 and target.dim() == 4:
+        pred = pred.unsqueeze(1)
+    # Now both should be [N, 1, H, W] or [N, C, H, W]
+    if pred.shape[-2:] != target.shape[-2:]:
+        pred = torch.nn.functional.interpolate(
+            pred, size=target.shape[-2:], mode='bilinear', align_corners=False
+        )
+    # Ensure channel dims match
+    if pred.shape[1] != target.shape[1]:
+        if target.shape[1] == 1 and pred.shape[1] > 1:
+            target = target.expand(pred.shape[0], pred.shape[1], *target.shape[2:])
+        elif pred.shape[1] == 1 and target.shape[1] > 1:
+            pred = pred.expand(target.shape[0], target.shape[1], *pred.shape[2:])
     input = pred.flatten(1)
     target = target.flatten(1).float()
 
-    # print("Before Intersection in Dice Loss:")
-    # print("Target shape (in Dice Loss):", target.shape)
-    # print("Prediction shape (In Dice Loss):", input.shape)
-
-    # Intersection
-    intersection = torch.sum(input * target, dim=1)
-
-    # Union
+    a = torch.sum(input * target, 1)
     if naive_dice:
-        union = torch.sum(input, dim=1) + torch.sum(target, dim=1)
+        b = torch.sum(input, 1)
+        c = torch.sum(target, 1)
+        d = (2 * a + eps) / (b + c + eps)
     else:
-        union = torch.sum(input * input, dim=1) + torch.sum(target * target, dim=1)
+        b = torch.sum(input * input, 1) + eps
+        c = torch.sum(target * target, 1) + eps
+        d = (2 * a) / (b + c)
 
-    # Dice coefficient
-    dice_score = (2 * intersection + eps) / (union + eps)
-    loss = 1 - dice_score
-
-    # Apply instance weight if provided
+    loss = 1 - d
     if weight is not None:
-        if weight.shape[0] == loss.shape[0]:
-            loss = loss * weight
-        else:
-            raise ValueError(f"Weight shape {weight.shape} does not match loss shape {loss.shape}")
-
-    # Reduce loss
-    loss = weight_reduce_loss(loss, weight=None, reduction=reduction, avg_factor=avg_factor)
+        assert weight.ndim == loss.ndim
+        assert len(weight) == len(pred)
+    loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
     return loss
-
 
 
 @MODELS.register_module()
@@ -143,7 +112,6 @@ class DiceLoss(nn.Module):
         Returns:
             torch.Tensor: The calculated loss
         """
-        # print("Dice loss forward called", flush=True)
 
         assert reduction_override in (None, 'none', 'mean', 'sum')
         reduction = (
