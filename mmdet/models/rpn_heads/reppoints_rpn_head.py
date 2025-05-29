@@ -694,19 +694,11 @@ class RepPointsRPNHead(AnchorFreeHead):
                     stride: int, avg_factor_init: int, avg_factor_refine: int
                     ) -> Tuple[Tensor, Tensor, Tensor]:
 
-        # print(f"[loss_single] cls_score shape: {cls_score.shape}, pts_pred_init shape: {pts_pred_init.shape}, pts_pred_refine shape: {pts_pred_refine.shape}")
-
         # ----- Classification Loss -----
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-
         labels = torch.cat(labels, dim=0).reshape(-1) if isinstance(labels, (list, tuple)) else labels.reshape(-1)
         label_weights = torch.cat(label_weights, dim=0).reshape(-1) if isinstance(label_weights, (list, tuple)) else label_weights.reshape(-1)
-
         valid_class_idx = (label_weights > 0).nonzero(as_tuple=False).view(-1)
-
-        # Debug: Print classes
-        # print("GT classes:", labels.cpu().numpy())
-        # print("Pred classes (logits):", cls_score.detach().cpu().numpy())
 
         if valid_class_idx.numel() > 0:
             cls_score = cls_score[valid_class_idx]
@@ -728,14 +720,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         pred_bboxes_init = self.points2bbox(pts_pred_init)
         pred_bboxes_refine = self.points2bbox(pts_pred_refine)
 
-        # Debug: Print GT and predicted boxes and points
-        # print("GT boxes (init):", gt_bboxes_init.cpu().numpy())
-        # print("Pred boxes (init):", pred_bboxes_init.detach().cpu().numpy())
-        # print("GT boxes (refine):", gt_bboxes_refine.cpu().numpy())
-        # print("Pred boxes (refine):", pred_bboxes_refine.detach().cpu().numpy())
-        # print("Pred points (init):", pts_pred_init.detach().cpu().numpy())
-        # print("Pred points (refine):", pts_pred_refine.detach().cpu().numpy())
-
+        # Align lengths
         min_len_init = min(pred_bboxes_init.size(0), gt_bboxes_init.size(0), gt_weights_init.size(0))
         pred_bboxes_init = pred_bboxes_init[:min_len_init]
         gt_bboxes_init = gt_bboxes_init[:min_len_init]
@@ -746,6 +731,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         gt_bboxes_refine = gt_bboxes_refine[:min_len_refine]
         gt_weights_refine = gt_weights_refine[:min_len_refine]
 
+        # Filter valid samples
         valid_init = gt_weights_init.sum(dim=1) > 0 if gt_weights_init.dim() > 1 else gt_weights_init > 0
         pred_bboxes_init = pred_bboxes_init[valid_init]
         gt_bboxes_init = gt_bboxes_init[valid_init]
@@ -758,7 +744,7 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         normalize_factor = self.point_base_scale * stride
 
-        # Ensure gt_bboxes_init and pred_bboxes_init have the same shape
+        # Ensure shapes match for loss computation
         if gt_bboxes_init.dim() == 1:
             gt_bboxes_init = gt_bboxes_init.unsqueeze(0)
         if pred_bboxes_init.dim() == 1:
@@ -768,21 +754,16 @@ class RepPointsRPNHead(AnchorFreeHead):
         if pred_bboxes_refine.dim() == 1:
             pred_bboxes_refine = pred_bboxes_refine.unsqueeze(0)
 
-        # --- Early exit for empty tensors to avoid shape mismatch ---
-        # If shapes still mismatch, skip loss for this batch
-                # --- Ensure pred and gt shapes match for loss ---
+        # --- Initial points loss ---
+        goto_skip_init = False
         if pred_bboxes_init.size(0) != gt_bboxes_init.size(0):
             if gt_bboxes_init.size(0) == 1 and pred_bboxes_init.size(0) > 1:
                 gt_bboxes_init = gt_bboxes_init.expand_as(pred_bboxes_init)
                 gt_weights_init = gt_weights_init.expand_as(pred_bboxes_init)
             else:
-                # print(f"[loss_single] Shape mismatch: pred_bboxes_init {pred_bboxes_init.size()}, gt_bboxes_init {gt_bboxes_init.size()}")
                 loss_pts_init = pred_bboxes_init.sum() * 0.0
                 goto_skip_init = True
-        else:
-            goto_skip_init = False
-
-        if not 'goto_skip_init' in locals() or not goto_skip_init:
+        if not goto_skip_init:
             loss_pts_init = self.loss_bbox_init(
                 pred_bboxes_init / normalize_factor,
                 gt_bboxes_init / normalize_factor,
@@ -790,18 +771,16 @@ class RepPointsRPNHead(AnchorFreeHead):
                 avg_factor=float(avg_factor_init)
             )
 
+        # --- Refined points loss ---
+        goto_skip_refine = False
         if pred_bboxes_refine.size(0) != gt_bboxes_refine.size(0):
             if gt_bboxes_refine.size(0) == 1 and pred_bboxes_refine.size(0) > 1:
                 gt_bboxes_refine = gt_bboxes_refine.expand_as(pred_bboxes_refine)
                 gt_weights_refine = gt_weights_refine.expand_as(pred_bboxes_refine)
             else:
-                # print(f"[loss_single] Shape mismatch: pred_bboxes_refine {pred_bboxes_refine.size()}, gt_bboxes_refine {gt_bboxes_refine.size()}")
                 loss_pts_refine = pred_bboxes_refine.sum() * 0.0
                 goto_skip_refine = True
-        else:
-            goto_skip_refine = False
-
-        if not 'goto_skip_refine' in locals() or not goto_skip_refine:
+        if not goto_skip_refine:
             loss_pts_refine = self.loss_bbox_refine(
                 pred_bboxes_refine / normalize_factor,
                 gt_bboxes_refine / normalize_factor,
