@@ -1,7 +1,3 @@
-from datetime import datetime
-timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-filename_tmpl = f'epoch_{{}}_{timestamp}.pth'
-
 # Enhanced training configuration
 train_cfg = dict(
     type='EpochBasedTrainLoop',
@@ -365,8 +361,7 @@ default_hooks = dict(
         type='mmdet.CheckpointHook',
         interval=50,
         max_keep_ckpts=3,  # Limit checkpoint storage
-        save_best='auto',
-        filename_tmpl=filename_tmpl
+        save_best='auto'
     ),
     sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
     visualization=dict(
