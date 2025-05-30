@@ -224,6 +224,12 @@ class FCNMaskHead(BaseModule):
                                            pos_labels)
         loss['loss_mask'] = loss_mask
         # TODO: which algorithm requires mask_targets?
+
+        print("[FCNMaskHead] mask_targets shape:", mask_targets.shape)
+        print("[FCNMaskHead] mask_preds shape:", mask_preds.shape)
+        print("[FCNMaskHead] pos_labels (first 5):", pos_labels[:5])
+
+
         return dict(loss_mask=loss, mask_targets=mask_targets)
 
     def predict_by_feat(self,

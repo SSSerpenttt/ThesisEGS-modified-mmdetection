@@ -13,7 +13,7 @@ model_train_cfg = dict(
     rpn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.7,
+            pos_iou_thr=0.3,
             neg_iou_thr=0.3,
             min_pos_iou=0.3,
             match_low_quality=True,
@@ -33,9 +33,9 @@ model_train_cfg = dict(
     rcnn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.5,
-            neg_iou_thr=0.4,  # Adjusted from 0.3 for better precision
-            min_pos_iou=0.5,
+            pos_iou_thr=0.3,
+            neg_iou_thr=0.3,  # Adjusted from 0.3 for better precision
+            min_pos_iou=0.1,
             match_low_quality=False,  # Stricter matching for RCNN
             ignore_iof_thr=-1
         ),
@@ -76,7 +76,7 @@ model = dict(
         type='mmdet.EfficientNet',
         arch='b3',
         out_indices=(2, 3, 4, 5),  # Correct stages for channel dimensions
-        norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.01, eps=1e-3),
+        norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.1, eps=1e-3),
         norm_eval=False,
         frozen_stages=0
     ),
@@ -105,9 +105,9 @@ model = dict(
             use_sigmoid=True,
             loss_weight=1.0),
         loss_bbox_init=dict(
-            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=0.5),
+            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=0.05),
         loss_bbox_refine=dict(
-            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=1.0),
+            type='mmdet.SmoothL1Loss', beta=1.0/9.0, loss_weight=0.05),
         transform_method='minmax',
         topk=1000,
         num_classes=1,  # Must be 1 for RPN
@@ -120,8 +120,8 @@ model = dict(
             refine=dict(
                 assigner=dict(
                     type='mmdet.MaxIoUAssigner',
-                    pos_iou_thr=0.5,
-                    neg_iou_thr=0.4,
+                    pos_iou_thr=0.3,
+                    neg_iou_thr=0.3,
                     min_pos_iou=0,
                     ignore_iof_thr=-1),
                 sampler=dict(
@@ -191,7 +191,7 @@ model = dict(
             num_classes=19,
             loss_mask=dict(
                 type='mmdet.DiceLoss',
-                loss_weight=2.0,
+                loss_weight=1.0,
                 activate=False,
                 eps=1e-5
             )
@@ -361,7 +361,7 @@ default_hooks = dict(
         type='mmdet.CheckpointHook',
         interval=50,
         max_keep_ckpts=3,  # Limit checkpoint storage
-        save_best='auto'
+        save_best='auto',
     ),
     sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
     visualization=dict(
@@ -402,5 +402,6 @@ visualizer = dict(
     name='visualizer'
 )
 
-resume = True
-load_from = '/content/work_dirs/modified-maskrcnn.config/epoch_1.pth'
+#Comment these out if not using weights===========================================================================================================
+# resume = True
+# load_from = '/content/epoch_1.05302025-14-55.pth'

@@ -222,8 +222,15 @@ class RepPointsRPNHead(AnchorFreeHead):
         # print("First 5 prior bboxes:", bboxes[:5].cpu().numpy())
         # print("All GT bboxes:", gt_instances.bboxes.cpu().numpy())
 
-        # ious = bbox_overlaps(bboxes, gt_instances.bboxes)
-        # print("IoU stats: min", ious.min().item(), "max", ious.max().item(), "mean", ious.mean().item())
+        ious = bbox_overlaps(bboxes, gt_instances.bboxes)
+        print("IoU stats: min", ious.min().item(), "max", ious.max().item(), "mean", ious.mean().item())
+        print("[_get_targets_single] assign_result.num_gts:", assign_result.num_gts)
+        print("[_get_targets_single] assign_result.gt_inds (first 10):", assign_result.gt_inds[:10])
+        print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
+        if hasattr(gt_instances, 'masks'):
+            print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
+        print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
 
         pred_instances = InstanceData(priors=bboxes)
 
@@ -285,11 +292,11 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_weights_list.append(bbox_weights[start_idx:end_idx])
             start_idx = end_idx
 
-        # print("Sample prior bbox:", bboxes[0].cpu().detach().numpy())
-        # print("Sample GT bbox:", gt_instances.bboxes[0].cpu().detach().numpy())
-
-        # print(f"[get_targets_single] GT bboxes: {gt_instances.bboxes.shape if hasattr(gt_instances, 'bboxes') else None}")
-        # print(f"[get_targets_single] pos_inds: {len(pos_inds)}, neg_inds: {len(neg_inds)}")
+        print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
+        if hasattr(gt_instances, 'masks'):
+            print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
+        print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
         return (labels_list, label_weights_list, bbox_gt_list, points, bbox_weights_list, len(pos_inds))
 
 
@@ -398,6 +405,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             # print(f"Input feat[{i}]: shape={f.shape}")
 
         outputs = multi_apply(self.forward_single, feats)
+
+        print("[RepPointsRPNHead] Received feature maps:", [f.shape for f in feats])
+        print("[RepPointsRPNHead] Configured point_strides:", self.point_strides)
 
         if self.training:
             cls_scores, pts_preds_init, pts_preds_refine = outputs
@@ -610,6 +620,9 @@ class RepPointsRPNHead(AnchorFreeHead):
     def get_points(self, featmap_sizes, img_metas_dict, device='cuda'):
         """Get points for all levels using the RepPoints prior generator."""
         mlvl_points = self.prior_generator.grid_priors(featmap_sizes, device=device)
+
+        for lvl, p in enumerate(mlvl_points):
+            print(f"[RepPointsRPNHead] Level {lvl} points shape: {p.shape}, stride: {self.point_strides[lvl]}")
         # mlvl_points is a list of tensors, one per level, shape (num_points, 2)
         # Repeat for each image
         center_list = [[p.clone() for p in mlvl_points] for _ in range(len(img_metas_dict))]
@@ -695,6 +708,10 @@ class RepPointsRPNHead(AnchorFreeHead):
                     gt_bboxes_refine: List[Tensor], gt_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int
                     ) -> Tuple[Tensor, Tensor, Tensor]:
+
+        print("[loss_single] labels (first 10):", labels[:10].cpu().numpy())
+        print("[loss_single] label_weights (first 10):", label_weights[:10].cpu().numpy())
+        print("[loss_single] valid_class_idx:", valid_class_idx.shape, "num valid:", valid_class_idx.numel())
 
         # ----- Classification Loss -----
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
