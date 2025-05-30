@@ -1,7 +1,11 @@
+from datetime import datetime
+timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+filename_tmpl = f'epoch_{{}}_{timestamp}.pth'
+
 # Enhanced training configuration
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=1,  # Extended for better convergence
+    max_epochs=10,  # Extended for better convergence
     val_interval=1,
     dynamic_intervals=[(20, 1)]  # More frequent late-stage validation
 )
@@ -62,7 +66,7 @@ model_test_cfg = dict(
         min_bbox_size=0
     ),
     rcnn=dict(
-        score_thr=0.3,
+        score_thr=0.01,
         nms=dict(type='soft_nms', iou_threshold=0.5),  # Changed to soft_nms
         max_per_img=200,  # Increased from 100
         mask_thr_binary=0.45  # Adjusted threshold
@@ -304,7 +308,7 @@ val_evaluator = dict(
     ann_file='/content/GroupEGS-Thesis-Dataset/valid/_annotations_cleaned_final.coco.json',
     metric=['bbox', 'segm'],
     classwise=True,
-    iou_thrs=[0.5, 0.75],  # Added stricter IoU threshold
+    # iou_thrs=[0.5, 0.75],  # Added stricter IoU threshold
     format_only=False
 )
 
@@ -314,8 +318,8 @@ test_evaluator['ann_file'] = '/content/GroupEGS-Thesis-Dataset/test/_annotations
 # Optimized training configuration
 optim_wrapper = dict(
     optimizer=dict(
-        type='AdamW',
-        lr=0.0002,
+        type='mmdet.AdamW',
+        lr=1e-4,
         weight_decay=0.05,
         betas=(0.9, 0.999)),
     paramwise_cfg=dict(
@@ -361,7 +365,8 @@ default_hooks = dict(
         type='mmdet.CheckpointHook',
         interval=50,
         max_keep_ckpts=3,  # Limit checkpoint storage
-        save_best='auto'
+        save_best='auto',
+        filename_tmpl=filename_tmpl
     ),
     sampler_seed=dict(type='mmdet.DistSamplerSeedHook'),
     visualization=dict(
@@ -401,3 +406,6 @@ visualizer = dict(
     ],
     name='visualizer'
 )
+
+resume = True
+load_from = '/content/work_dirs/modified-maskrcnn.config/epoch_1.pth'
