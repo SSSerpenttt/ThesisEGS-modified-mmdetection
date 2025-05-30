@@ -188,6 +188,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         # Concatenate all per-level tensors for all images
         labels = torch.cat(labels, dim=0)
         label_weights = torch.cat(label_weights, dim=0)
+        # print("[get_targets] label_weights sum:", label_weights.sum().item(), "shape:", label_weights.shape)
         bbox_gt = torch.cat(bbox_gt, dim=0)
         bbox_weights = torch.cat(bbox_weights, dim=0)
         points_flat = torch.cat(points_flat, dim=0)
@@ -223,14 +224,13 @@ class RepPointsRPNHead(AnchorFreeHead):
         # print("All GT bboxes:", gt_instances.bboxes.cpu().numpy())
 
         ious = bbox_overlaps(bboxes, gt_instances.bboxes)
-        print("IoU stats: min", ious.min().item(), "max", ious.max().item(), "mean", ious.mean().item())
-        print("[_get_targets_single] assign_result.num_gts:", assign_result.num_gts)
-        print("[_get_targets_single] assign_result.gt_inds (first 10):", assign_result.gt_inds[:10])
-        print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
-        print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
-        if hasattr(gt_instances, 'masks'):
-            print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
-        print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
+        # print("IoU stats: min", ious.min().item(), "max", ious.max().item(), "mean", ious.mean().item())
+        
+        # print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        # print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
+        
+        # if hasattr(gt_instances, 'masks'):
+        #     print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
 
         pred_instances = InstanceData(priors=bboxes)
 
@@ -248,6 +248,9 @@ class RepPointsRPNHead(AnchorFreeHead):
             pred_instances=pred_instances,
             gt_instances=gt_instances,
             gt_instances_ignore=gt_instances_ignore)
+        
+        # print("[_get_targets_single] assign_result.num_gts:", assign_result.num_gts)
+        # print("[_get_targets_single] assign_result.gt_inds (first 10):", assign_result.gt_inds[:10])
 
         sampling_result = self.sampler.sample(
             assign_result=assign_result,
@@ -263,6 +266,8 @@ class RepPointsRPNHead(AnchorFreeHead):
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
 
+        # print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
+
         if len(pos_inds) > 0:
             # print("Assigning GT boxes to positive priors:")
             # print("pos_inds:", pos_inds)
@@ -273,6 +278,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                 pos_gt_bboxes = pos_gt_bboxes.tensor
             bbox_gt[pos_inds, :] = pos_gt_bboxes
             bbox_weights[pos_inds, :] = 1.0
+            label_weights[pos_inds] = 1.0
 
         if len(neg_inds) > 0:
             label_weights[neg_inds] = 1.0
@@ -292,11 +298,12 @@ class RepPointsRPNHead(AnchorFreeHead):
             bbox_weights_list.append(bbox_weights[start_idx:end_idx])
             start_idx = end_idx
 
-        print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
-        print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
-        if hasattr(gt_instances, 'masks'):
-            print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
-        print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
+        # print("[RPN _get_targets_single] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        # print("[RPN _get_targets_single] GT labels (first 5):", gt_instances.labels[:5])
+        # if hasattr(gt_instances, 'masks'):
+        #     print("[RPN _get_targets_single] GT masks type:", type(gt_instances.masks))
+        # print("[RPN _get_targets_single] Num pos_inds:", len(pos_inds), "Num neg_inds:", len(neg_inds))
+
         return (labels_list, label_weights_list, bbox_gt_list, points, bbox_weights_list, len(pos_inds))
 
 
@@ -406,8 +413,8 @@ class RepPointsRPNHead(AnchorFreeHead):
 
         outputs = multi_apply(self.forward_single, feats)
 
-        print("[RepPointsRPNHead] Received feature maps:", [f.shape for f in feats])
-        print("[RepPointsRPNHead] Configured point_strides:", self.point_strides)
+        # print("[RepPointsRPNHead] Received feature maps:", [f.shape for f in feats])
+        # print("[RepPointsRPNHead] Configured point_strides:", self.point_strides)
 
         if self.training:
             cls_scores, pts_preds_init, pts_preds_refine = outputs
@@ -621,8 +628,9 @@ class RepPointsRPNHead(AnchorFreeHead):
         """Get points for all levels using the RepPoints prior generator."""
         mlvl_points = self.prior_generator.grid_priors(featmap_sizes, device=device)
 
-        for lvl, p in enumerate(mlvl_points):
-            print(f"[RepPointsRPNHead] Level {lvl} points shape: {p.shape}, stride: {self.point_strides[lvl]}")
+        # for lvl, p in enumerate(mlvl_points):
+        #     print(f"[RepPointsRPNHead] Level {lvl} points shape: {p.shape}, stride: {self.point_strides[lvl]}")
+       
         # mlvl_points is a list of tensors, one per level, shape (num_points, 2)
         # Repeat for each image
         center_list = [[p.clone() for p in mlvl_points] for _ in range(len(img_metas_dict))]
@@ -708,16 +716,31 @@ class RepPointsRPNHead(AnchorFreeHead):
                     gt_bboxes_refine: List[Tensor], gt_weights_refine: List[Tensor],
                     stride: int, avg_factor_init: int, avg_factor_refine: int
                     ) -> Tuple[Tensor, Tensor, Tensor]:
+        
+        # print(f"[loss_single] stride for this level: {stride}")
 
-        print("[loss_single] labels (first 10):", labels[:10].cpu().numpy())
-        print("[loss_single] label_weights (first 10):", label_weights[:10].cpu().numpy())
-        print("[loss_single] valid_class_idx:", valid_class_idx.shape, "num valid:", valid_class_idx.numel())
+        # print("[loss_single] labels shape:", labels.shape)
+        # print("[loss_single] label_weights shape:", label_weights.shape)
+
+        if isinstance(labels, (list, tuple)):
+            labels = torch.cat(labels, dim=0)
+        if isinstance(label_weights, (list, tuple)):
+            label_weights = torch.cat(label_weights, dim=0)
+
+        # Only print if labels is not empty and has at least 1 dimension
+        # if labels.numel() > 0 and labels.dim() > 0:
+        #     # print("[loss_single] labels (first 10):", labels[:10].cpu().numpy())
+        # else:
+        #     print("[loss_single] labels: EMPTY or scalar", labels.item() if labels.numel() == 1 else labels)
+
 
         # ----- Classification Loss -----
         cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
         labels = torch.cat(labels, dim=0).reshape(-1) if isinstance(labels, (list, tuple)) else labels.reshape(-1)
         label_weights = torch.cat(label_weights, dim=0).reshape(-1) if isinstance(label_weights, (list, tuple)) else label_weights.reshape(-1)
         valid_class_idx = (label_weights > 0).nonzero(as_tuple=False).view(-1)
+
+        # print("[loss_single] valid_class_idx:", valid_class_idx.shape, "num valid:", valid_class_idx.numel())
 
         if valid_class_idx.numel() > 0:
             cls_score = cls_score[valid_class_idx]

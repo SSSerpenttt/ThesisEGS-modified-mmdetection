@@ -122,7 +122,7 @@ class BiFPN(nn.Module):
     def forward(self, inputs):
         """Enhanced forward pass with better memory management."""
         assert len(inputs) == len(self.in_channels)
-        print("[BiFPN] Input shapes:", [f.shape for f in inputs])
+        # print("[BiFPN] Input shapes:", [f.shape for f in inputs])
 
         # Build laterals
         laterals = [
@@ -155,12 +155,12 @@ class BiFPN(nn.Module):
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
 
-        print("[BiFPN] Input shapes:", [f.shape for f in inputs])
-        for idx, bifpn_module in enumerate(self.stack_bifpn_convs):
-            print(f"[BiFPN] Processing BiFPN stack {idx}")
+        # print("[BiFPN] Input shapes:", [f.shape for f in inputs])
+        # for idx, bifpn_module in enumerate(self.stack_bifpn_convs):
+        #     print(f"[BiFPN] Processing BiFPN stack {idx}")
         
         laterals = bifpn_module(laterals)
-        print("[BiFPN] Output shapes:", [f.shape for f in laterals])
+        # print("[BiFPN] Output shapes:", [f.shape for f in laterals])
 
         return tuple(outs)
 

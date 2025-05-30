@@ -13,9 +13,9 @@ model_train_cfg = dict(
     rpn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.3,
+            pos_iou_thr=0.2,
             neg_iou_thr=0.3,
-            min_pos_iou=0.3,
+            min_pos_iou=0.1,
             match_low_quality=True,
             ignore_iof_thr=-1
         ),
@@ -33,7 +33,7 @@ model_train_cfg = dict(
     rcnn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.3,
+            pos_iou_thr=0.2,
             neg_iou_thr=0.3,  # Adjusted from 0.3 for better precision
             min_pos_iou=0.1,
             match_low_quality=False,  # Stricter matching for RCNN
@@ -84,12 +84,12 @@ model = dict(
         type='mmdet.BiFPN',
         in_channels=[32, 48, 136, 384],  # Must match EfficientNet-b3 stages
         out_channels=256,  # This will feed into RPN head
-        num_outs=5,
+        num_outs=4,
         stack=2,
         start_level=0,
         end_level=-1,
         norm_cfg=dict(type='mmdet.BN', requires_grad=True),
-        add_extra_convs='on_output'
+        add_extra_convs='None'
     ),
     rpn_head=dict(
         type='mmdet.RepPointsRPNHead',
@@ -98,7 +98,7 @@ model = dict(
         point_feat_channels=256,
         num_points=9,
         gradient_mul=0.1,
-        point_strides=[4, 8, 16, 32, 64],
+        point_strides=[4, 8, 16, 32],
         point_base_scale=2,
         loss_cls=dict(
             type='mmdet.CrossEntropyLoss',
@@ -120,9 +120,9 @@ model = dict(
             refine=dict(
                 assigner=dict(
                     type='mmdet.MaxIoUAssigner',
-                    pos_iou_thr=0.3,
+                    pos_iou_thr=0.2,
                     neg_iou_thr=0.3,
-                    min_pos_iou=0,
+                    min_pos_iou=1,
                     ignore_iof_thr=-1),
                 sampler=dict(
                     type='mmdet.RandomSampler',
@@ -150,7 +150,7 @@ model = dict(
                 sampling_ratio=2
             ),
             out_channels=256,  # Must match neck output channels
-            featmap_strides=[4, 8, 16, 32, 64],
+            featmap_strides=[4, 8, 16, 32],
             finest_scale=56
         ),
         bbox_head=dict(
@@ -353,7 +353,7 @@ default_hooks = dict(
     timer=dict(type='mmdet.IterTimerHook'),
     logger=dict(
         type='mmdet.LoggerHook',
-        interval=50,
+        interval=1,
         log_metric_by_epoch=True
     ),
     param_scheduler=dict(type='mmdet.ParamSchedulerHook'),

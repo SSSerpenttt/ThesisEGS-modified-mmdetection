@@ -171,12 +171,12 @@ class TensorPackDetInputs:
 
         packed_results['data_samples'] = [data_sample]
 
-        if hasattr(gt_instances, 'bboxes'):
-            print("[TensorPackDetInputs] GT bboxes (first 5):", gt_instances.bboxes[:5])
-        if hasattr(gt_instances, 'labels'):
-            print("[TensorPackDetInputs] GT labels (first 5):", gt_instances.labels[:5])
-        if hasattr(gt_instances, 'masks'):
-            print("[TensorPackDetInputs] GT masks (first 1):", type(gt_instances.masks), "Num:", len(gt_instances.masks) if hasattr(gt_instances.masks, '__len__') else 'N/A')
+        # if hasattr(gt_instances, 'bboxes'):
+        #     print("[TensorPackDetInputs] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        # if hasattr(gt_instances, 'labels'):
+        #     print("[TensorPackDetInputs] GT labels (first 5):", gt_instances.labels[:5])
+        # if hasattr(gt_instances, 'masks'):
+        #     print("[TensorPackDetInputs] GT masks (first 1):", type(gt_instances.masks), "Num:", len(gt_instances.masks) if hasattr(gt_instances.masks, '__len__') else 'N/A')
 
         return packed_results
 

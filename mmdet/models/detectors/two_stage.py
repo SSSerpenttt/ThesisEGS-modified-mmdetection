@@ -104,16 +104,15 @@ class TwoStageDetector(BaseDetector):
         if isinstance(batch_inputs, list):
             batch_inputs = torch.stack(batch_inputs, dim=0)
         x = self.backbone(batch_inputs)
-        print("[extract_feat] Backbone outputs:", [f.shape for f in x])
+        # print("[extract_feat] Backbone outputs:", [f.shape for f in x])
         if self.with_neck:
             x = self.neck(x)
-            print("[extract_feat] Neck outputs:", [f.shape for f in x])
-        #   print("Neck output shapes:", [feat.shape for feat in x])
+            # print("[extract_feat] Neck outputs:", [f.shape for f in x])
         # else:
         #     print("No neck used")
-        expected_strides = [4, 8, 16, 32, 64]
-        for i, feat in enumerate(x):
-            print(f"[extract_feat] Feature map {i} stride (expected {expected_strides[i]}): shape={feat.shape}")
+        # expected_strides = [4, 8, 16, 32, 64]
+        # for i, feat in enumerate(x):
+            # print(f"[extract_feat] Feature map {i} stride (expected {expected_strides[i]}): shape={feat.shape}")
         
         return x
 
@@ -150,21 +149,21 @@ class TwoStageDetector(BaseDetector):
                 cls_scores, _, pts_preds_refine = rpn_outputs
                 rpn_results_list = self.rpn_head.get_proposals(
                     cls_scores, pts_preds_refine, batch_data_samples)
-                for i, rpn_results in enumerate(rpn_results_list):
-                    print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
+                # for i, rpn_results in enumerate(rpn_results_list):
+                    # print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
             else:
                 cls_scores, bbox_preds = rpn_outputs
                 rpn_results_list = self.rpn_head.get_proposals(
                     cls_scores, bbox_preds, batch_data_samples)
-                for i, rpn_results in enumerate(rpn_results_list):
-                    print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
+                # for i, rpn_results in enumerate(rpn_results_list):
+                #     print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
         else:
             # If RPN is not used, use existing proposals
             rpn_results_list = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
-            for i, rpn_results in enumerate(rpn_results_list):
-                print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
+            # for i, rpn_results in enumerate(rpn_results_list):
+            #     print(f"[RPN Proposals] Image {i}: bboxes shape {rpn_results.bboxes.shape}, scores: {getattr(rpn_results, 'scores', None)}")
         # Forward the RoI head
         roi_outs = self.roi_head.forward(x, rpn_results_list, batch_data_samples)
         return roi_outs
