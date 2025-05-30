@@ -13,9 +13,9 @@ model_train_cfg = dict(
     rpn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.2,
-            neg_iou_thr=0.3,
-            min_pos_iou=0.1,
+            pos_iou_thr=0.45,
+            neg_iou_thr=0.5,
+            min_pos_iou=0.2,
             match_low_quality=True,
             ignore_iof_thr=-1
         ),
@@ -33,9 +33,9 @@ model_train_cfg = dict(
     rcnn=dict(
         assigner=dict(
             type='mmdet.MaxIoUAssigner',
-            pos_iou_thr=0.2,
-            neg_iou_thr=0.3,  # Adjusted from 0.3 for better precision
-            min_pos_iou=0.1,
+            pos_iou_thr=0.45,
+            neg_iou_thr=0.5,  # Adjusted from 0.3 for better precision
+            min_pos_iou=0.2,
             match_low_quality=False,  # Stricter matching for RCNN
             ignore_iof_thr=-1
         ),
@@ -55,14 +55,14 @@ model_train_cfg = dict(
 # Enhanced test configuration
 model_test_cfg = dict(
     rpn=dict(
-        score_thr=0.01,
+        score_thr=0.015,
         nms_pre=3000,  # Increased from 300
         max_per_img=1000,
-        nms=dict(type='nms', iou_threshold=0.7),
+        nms=dict(type='nms', iou_threshold=0.5),
         min_bbox_size=0
     ),
     rcnn=dict(
-        score_thr=0.01,
+        score_thr=0.015,
         nms=dict(type='soft_nms', iou_threshold=0.5),  # Changed to soft_nms
         max_per_img=200,  # Increased from 100
         mask_thr_binary=0.45  # Adjusted threshold
@@ -78,14 +78,14 @@ model = dict(
         out_indices=(2, 3, 4, 5),  # Correct stages for channel dimensions
         norm_cfg=dict(type='mmdet.BN', requires_grad=True, momentum=0.1, eps=1e-3),
         norm_eval=False,
-        frozen_stages=0
+        frozen_stages=1
     ),
     neck=dict(
         type='mmdet.BiFPN',
         in_channels=[32, 48, 136, 384],  # Must match EfficientNet-b3 stages
         out_channels=256,  # This will feed into RPN head
         num_outs=4,
-        stack=2,
+        stack=3,
         start_level=0,
         end_level=-1,
         norm_cfg=dict(type='mmdet.BN', requires_grad=True),
@@ -120,9 +120,9 @@ model = dict(
             refine=dict(
                 assigner=dict(
                     type='mmdet.MaxIoUAssigner',
-                    pos_iou_thr=0.2,
-                    neg_iou_thr=0.3,
-                    min_pos_iou=1,
+                    pos_iou_thr=0.45,
+                    neg_iou_thr=0.5,
+                    min_pos_iou=2,
                     ignore_iof_thr=-1),
                 sampler=dict(
                     type='mmdet.RandomSampler',
@@ -353,7 +353,7 @@ default_hooks = dict(
     timer=dict(type='mmdet.IterTimerHook'),
     logger=dict(
         type='mmdet.LoggerHook',
-        interval=1,
+        interval=25,
         log_metric_by_epoch=True
     ),
     param_scheduler=dict(type='mmdet.ParamSchedulerHook'),
