@@ -22,6 +22,198 @@ from ..registry import MODELS
 from ..structures import DetDataSample, SampleList
 from ..utils import get_test_pipeline_cfg
 
+import argparse
+import os
+import os.path as osp
+
+from mmengine.config import Config, DictAction
+from mmengine.registry import RUNNERS
+from mmengine.runner import Runner
+
+from mmdet.utils import setup_cache_size_limit_of_dynamo
+
+import torch
+torch.autograd.set_detect_anomaly(True)
+
+from mmengine.registry import TRANSFORMS
+import numpy as np
+
+from mmengine.structures import InstanceData
+from mmdet.structures import DetDataSample
+from mmdet.structures.mask import PolygonMasks
+from mmdet.structures.mask import mask2bbox
+
+
+@TRANSFORMS.register_module()
+class RenameGtLabels:
+    def __call__(self, results):
+        # If "gt_labels" is missing and "gt_bboxes_labels" exists, rename it.
+        if 'gt_bboxes_labels' in results and 'gt_labels' not in results:
+            results['gt_labels'] = results['gt_bboxes_labels']
+        return results
+
+@TRANSFORMS.register_module()
+class InspectAnnotations:
+    def __call__(self, results):
+        # print("InspectAnnotations running", flush=True)
+        # Check for ground-truth boxes:
+        if 'gt_bboxes' in results:
+            gt_bboxes = results['gt_bboxes']
+            # If the boxes are wrapped (e.g., in a HorizontalBoxes),
+            # try to get the underlying tensor.
+            if hasattr(gt_bboxes, 'tensor'):
+                bbox_tensor = gt_bboxes.tensor
+            else:
+                bbox_tensor = gt_bboxes
+        #     print("BBoxes shape:", np.array(bbox_tensor.cpu().numpy()).shape, flush=True)
+        # else:
+        #     print("No gt_bboxes found!", flush=True)
+        
+        # Check for ground-truth labels:
+        if 'gt_bboxes_labels' in results:
+            gt_labels = results['gt_bboxes_labels']
+            # It might be a list of labels or a tensor.
+            if isinstance(gt_labels, torch.Tensor):
+                labels_array = gt_labels.cpu().numpy()
+            else:
+                labels_array = np.array(gt_labels)
+        #     print("Labels shape:", labels_array.shape, flush=True)
+        # else:
+        #     print("No gt_bboxes_labels found!", flush=True)
+        
+        # Optionally, check gt_masks if available:
+        if 'gt_masks' in results:
+            gt_masks = results['gt_masks']
+        #     # Depending on the format, this might be a custom object.
+        #     # If using PolygonMasks, you might check the number of masks.
+        #     if hasattr(gt_masks, 'masks'):
+        #         print("gt_masks has", len(gt_masks.masks), "masks", flush=True)
+        #     else:
+        #         print("gt_masks:", type(gt_masks), flush=True)
+        # else:
+        #     print("No gt_masks found!", flush=True)
+        
+        return results
+
+@TRANSFORMS.register_module()
+class EfficientNetPreprocessor:
+    """Complete preprocessing pipeline for EfficientNet with batch dimension"""
+    def __init__(self, size_divisor=32, mean=None, std=None, to_rgb=True):
+        self.size_divisor = size_divisor
+        self.mean = torch.tensor(mean).view(3, 1, 1) if mean else None
+        self.std = torch.tensor(std).view(3, 1, 1) if std else None
+        self.to_rgb = to_rgb
+        
+    def __call__(self, results):
+        # 1. Ensure contiguous numpy array
+        img = results['img']
+        if isinstance(img, np.ndarray):
+            img = np.ascontiguousarray(img)
+        
+        # 2. Convert to tensor
+        img = torch.from_numpy(img).float()
+        
+        # 3. Handle channel order (RGB/BGR)
+        if img.shape[2] == 3:  # HWC to CHW
+            img = img.permute(2, 0, 1)
+            if self.to_rgb:
+                img = img[[2, 1, 0]]  # BGR to RGB
+        
+        # 4. Apply normalization
+        if self.mean is not None and self.std is not None:
+            img = (img - self.mean) / self.std
+        
+        # 5. Padding
+        h, w = img.shape[-2], img.shape[-1]
+        pad_h = (self.size_divisor - h % self.size_divisor) % self.size_divisor
+        pad_w = (self.size_divisor - w % self.size_divisor) % self.size_divisor
+        if pad_h > 0 or pad_w > 0:
+            img = torch.nn.functional.pad(img, (0, pad_w, 0, pad_h), value=0)
+        
+        # 6. Store processed image (ensure contiguous)
+        results['img'] = img.contiguous()
+        results['img_shape'] = (img.shape[-2], img.shape[-1])
+        return results
+
+@TRANSFORMS.register_module()
+class TensorPackDetInputs:
+    def __init__(self, meta_keys=()):
+        self.meta_keys = meta_keys
+
+    def __call__(self, results):
+        packed_results = {}
+
+        # Pack image
+        if 'img' in results:
+            img = results['img']
+            if not isinstance(img, torch.Tensor):
+                img = torch.from_numpy(np.ascontiguousarray(img))
+            packed_results['inputs'] = img.contiguous()
+
+        # Create DetDataSample
+        data_sample = DetDataSample()
+        gt_instances = InstanceData()
+
+        # Handle bboxes
+        if 'gt_bboxes' in results:
+            raw_bboxes = results['gt_bboxes']
+            if hasattr(raw_bboxes, 'tensor'):
+                gt_instances.bboxes = raw_bboxes.tensor.float()
+            else:
+                gt_instances.bboxes = torch.as_tensor(raw_bboxes, dtype=torch.float32)
+        
+        # Handle labels - ensure we have same number as bboxes
+        if 'gt_labels' in results:
+            labels = torch.as_tensor(results['gt_labels'], dtype=torch.long)
+        elif 'gt_bboxes_labels' in results:
+            labels = torch.as_tensor(results['gt_bboxes_labels'], dtype=torch.long)
+        else:
+            num_boxes = len(gt_instances.bboxes) if hasattr(gt_instances, 'bboxes') else 0
+            labels = torch.zeros(num_boxes, dtype=torch.long)
+
+        
+        gt_instances.labels = labels
+
+        # Handle masks if present
+        if 'gt_masks' in results:
+            polygons = results['gt_masks']
+            height, width = results['img_shape']
+            formatted_polygons = []
+            for seg in polygons:
+                formatted_seg = [np.array(p, dtype=np.float32) for p in seg]
+                formatted_polygons.append(formatted_seg)
+            gt_instances.masks = PolygonMasks(formatted_polygons, height, width)
+
+        data_sample.gt_instances = gt_instances
+
+        # Pack metainfo
+        meta_dict = {}
+        for key in self.meta_keys:
+            if key in results:
+                meta_dict[key] = results[key]
+        data_sample.set_metainfo(meta_dict)
+
+        packed_results['data_samples'] = [data_sample]
+
+        # if hasattr(gt_instances, 'bboxes'):
+        #     print("[TensorPackDetInputs] GT bboxes (first 5):", gt_instances.bboxes[:5])
+        # if hasattr(gt_instances, 'labels'):
+        #     print("[TensorPackDetInputs] GT labels (first 5):", gt_instances.labels[:5])
+        # if hasattr(gt_instances, 'masks'):
+        #     print("[TensorPackDetInputs] GT masks (first 1):", type(gt_instances.masks), "Num:", len(gt_instances.masks) if hasattr(gt_instances.masks, '__len__') else 'N/A')
+
+        return packed_results
+
+
+@TRANSFORMS.register_module()
+class DebugInput:
+    def __call__(self, results):
+        img = results['img']
+        print(f"Final input - Shape: {img.shape}", flush=True)
+        print(f"Channel means: {img.mean(dim=[1,2])}", flush=True)
+        print(f"Keys in results: {list(results.keys())}", flush=True)
+        print(f"Meta info preview: {[k for k in ['img_id', 'img_shape', 'ori_shape', 'scale_factor'] if k in results]}", flush=True)
+        return results
 
 def init_detector(
     config: Union[str, Path, Config],
