@@ -48,21 +48,29 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def show_image_with_boxes_and_masks(img, pred_bboxes, pred_masks, gt_bboxes, gt_masks):
+    # Ensure image is in (H, W, 3) format for matplotlib
+    if img.ndim == 3:
+        if img.shape[0] == 3:  # (3, H, W)
+            img = img.transpose(1, 2, 0)
+        elif img.shape[1] == 3:  # (H, 3, W)
+            img = img.transpose(0, 2, 1)
+        # else: assume (H, W, 3)
     plt.figure(figsize=(12, 6))
-    # Show image
-    plt.imshow(img.transpose(1, 2, 0).astype(np.uint8))
+    plt.imshow(img.astype(np.uint8))
     # Plot predicted bboxes
-    for box in pred_bboxes:
-        x1, y1, x2, y2 = box[:4]
-        plt.gca().add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor='r', linewidth=2))
+    if pred_bboxes is not None:
+        for box in pred_bboxes:
+            x1, y1, x2, y2 = box[:4]
+            plt.gca().add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor='r', linewidth=2))
     # Overlay predicted masks
     if pred_masks is not None:
         for mask in pred_masks:
             plt.imshow(mask, alpha=0.3, cmap='Reds')
     # Plot GT bboxes
-    for box in gt_bboxes:
-        x1, y1, x2, y2 = box[:4]
-        plt.gca().add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor='g', linewidth=2))
+    if gt_bboxes is not None:
+        for box in gt_bboxes:
+            x1, y1, x2, y2 = box[:4]
+            plt.gca().add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor='g', linewidth=2))
     # Overlay GT masks
     if gt_masks is not None:
         for mask in gt_masks:
