@@ -212,6 +212,14 @@ class FCNMaskHead(BaseModule):
         # print("Resized Target shape (in FCN Mask Head):", mask_targets.shape, flush=True)
         # print("Prediction shape (In FCN Mask Head):", mask_preds.shape, flush=True)
 
+        if mask_targets.shape[1] == 1 and mask_preds.shape[1] > 1:
+            # One-hot encode to [N, num_classes, H, W]
+            num_classes = mask_preds.shape[1]
+            N, _, H, W = mask_targets.shape
+            mask_targets_onehot = torch.zeros((N, num_classes, H, W), dtype=mask_targets.dtype, device=mask_targets.device)
+            mask_targets_onehot[torch.arange(N), pos_labels] = mask_targets[:, 0]
+            mask_targets = mask_targets_onehot
+
         loss = dict()
         if mask_preds.size(0) == 0:
             loss_mask = mask_preds.sum()
@@ -225,10 +233,9 @@ class FCNMaskHead(BaseModule):
         loss['loss_mask'] = loss_mask
         # TODO: which algorithm requires mask_targets?
 
-        # print("[FCNMaskHead] mask_targets shape:", mask_targets.shape)
-        # print("[FCNMaskHead] mask_preds shape:", mask_preds.shape)
+        print("[FCNMaskHead] mask_targets shape:", mask_targets.shape)
+        print("[FCNMaskHead] mask_preds shape:", mask_preds.shape)
         # print("[FCNMaskHead] pos_labels (first 5):", pos_labels[:5])
-
 
         return dict(loss_mask=loss, mask_targets=mask_targets)
 
