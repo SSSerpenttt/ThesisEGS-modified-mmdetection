@@ -50,11 +50,18 @@ import numpy as np
 def show_image_with_boxes_and_masks(img, pred_bboxes, pred_masks, gt_bboxes, gt_masks):
     # Ensure image is in (H, W, 3) format for matplotlib
     if img.ndim == 3:
-        if img.shape[0] == 3:  # (3, H, W)
+        # If shape is (3, H, W) or (H, 3, W), transpose to (H, W, 3)
+        if img.shape[0] == 3 and img.shape[1] != 3:
             img = img.transpose(1, 2, 0)
-        elif img.shape[1] == 3:  # (H, 3, W)
+        elif img.shape[1] == 3 and img.shape[0] != 3:
             img = img.transpose(0, 2, 1)
-        # else: assume (H, W, 3)
+        # If already (H, W, 3), do nothing
+    elif img.ndim == 2:
+        # If grayscale, convert to RGB
+        img = np.stack([img]*3, axis=-1)
+    else:
+        raise ValueError(f"Unsupported image shape: {img.shape}")
+
     plt.figure(figsize=(12, 6))
     plt.imshow(img.astype(np.uint8))
     # Plot predicted bboxes
