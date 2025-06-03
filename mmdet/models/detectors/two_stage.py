@@ -98,27 +98,35 @@ class TwoStageDetector(BaseDetector):
         return hasattr(self, 'roi_head') and self.roi_head is not None
 
     def extract_feat(self, batch_inputs: Tensor) -> Tuple[Tensor]:
-        # Debug check
-        # print(f"extract_feat input type: {type(batch_inputs)}")
-        # if isinstance(batch_inputs, torch.Tensor):
-        #     print(f"extract_feat input shape: {batch_inputs.shape}")
-        # else:
-        #     raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
+        """Extract features.
 
+        Args:
+            batch_inputs (Tensor): Image tensor with shape (N, C, H ,W).
+
+        Returns:
+            tuple[Tensor]: Multi-level features that may have
+            different resolutions.
+        """
         x = self.backbone(batch_inputs)
         if self.with_neck:
             x = self.neck(x)
         return x
 
     def _forward(self, batch_inputs: Tensor,
-                batch_data_samples: SampleList) -> tuple:
-        # Debug check
-        # print(f"_forward batch_inputs type: {type(batch_inputs)}")
-        # if isinstance(batch_inputs, torch.Tensor):
-        #     print(f"_forward batch_inputs shape: {batch_inputs.shape}")
-        # else:
-        #     raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
+                 batch_data_samples: SampleList) -> tuple:
+        """Network forward process. Usually includes backbone, neck and head
+        forward without any post-processing.
 
+        Args:
+            batch_inputs (Tensor): Inputs with shape (N, C, H, W).
+            batch_data_samples (list[:obj:`DetDataSample`]): Each item contains
+                the meta information of each image and corresponding
+                annotations.
+
+        Returns:
+            tuple: A tuple of features from ``rpn_head`` and ``roi_head``
+            forward.
+        """
         results = ()
         x = self.extract_feat(batch_inputs)
 
@@ -131,7 +139,7 @@ class TwoStageDetector(BaseDetector):
                 data_sample.proposals for data_sample in batch_data_samples
             ]
         roi_outs = self.roi_head.forward(x, rpn_results_list,
-                                        batch_data_samples)
+                                         batch_data_samples)
         results = results + (roi_outs, )
         return results
 
