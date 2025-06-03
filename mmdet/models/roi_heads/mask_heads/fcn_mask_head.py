@@ -140,7 +140,6 @@ class FCNMaskHead(BaseModule):
         Returns:
             Tensor: Predicted foreground masks.
         """
-        # print("FCN mask head forward called", flush=True)
         for conv in self.convs:
             x = conv(x)
         if self.upsample is not None:
@@ -195,30 +194,12 @@ class FCNMaskHead(BaseModule):
         Returns:
             dict: A dictionary of loss and targets components.
         """
-        # print("FCN mask head loss_and_target called", flush=True)
         mask_targets = self.get_targets(
             sampling_results=sampling_results,
             batch_gt_instances=batch_gt_instances,
             rcnn_train_cfg=rcnn_train_cfg)
 
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
-
-        # print("Target shape (in FCN Mask Head):", mask_targets.shape, flush=True)
-        # print("Prediction shape (In FCN Mask Head):", mask_preds.shape, flush=True)
-
-        if mask_targets.dim() == 3:
-            mask_targets = mask_targets.unsqueeze(1)
-
-        # print("Resized Target shape (in FCN Mask Head):", mask_targets.shape, flush=True)
-        # print("Prediction shape (In FCN Mask Head):", mask_preds.shape, flush=True)
-
-        if mask_targets.shape[1] == 1 and mask_preds.shape[1] > 1:
-            # One-hot encode to [N, num_classes, H, W]
-            num_classes = mask_preds.shape[1]
-            N, _, H, W = mask_targets.shape
-            mask_targets_onehot = torch.zeros((N, num_classes, H, W), dtype=mask_targets.dtype, device=mask_targets.device)
-            mask_targets_onehot[torch.arange(N), pos_labels] = mask_targets[:, 0]
-            mask_targets = mask_targets_onehot
 
         loss = dict()
         if mask_preds.size(0) == 0:
@@ -232,11 +213,6 @@ class FCNMaskHead(BaseModule):
                                            pos_labels)
         loss['loss_mask'] = loss_mask
         # TODO: which algorithm requires mask_targets?
-
-        # print("[FCNMaskHead] mask_targets shape:", mask_targets.shape)
-        # print("[FCNMaskHead] mask_preds shape:", mask_preds.shape)
-        # print("[FCNMaskHead] pos_labels (first 5):", pos_labels[:5])
-
         return dict(loss_mask=loss, mask_targets=mask_targets)
 
     def predict_by_feat(self,
@@ -246,7 +222,6 @@ class FCNMaskHead(BaseModule):
                         rcnn_test_cfg: ConfigDict,
                         rescale: bool = False,
                         activate_map: bool = False) -> InstanceList:
-        # print("FCN mask head predict_by_feat called", flush=True)
         """Transform a batch of output features extracted from the head into
         mask results.
 
