@@ -143,18 +143,18 @@ class FCNMaskHead(BaseModule):
         for conv in self.convs:
             x = conv(x)
 
-        print("🔍 After convs, before upsample:", x.shape)
+        # print("🔍 After convs, before upsample:", x.shape)
 
         if self.upsample is not None:
             x = self.upsample(x)
             if self.upsample_method == 'deconv':
                 x = self.relu(x)
 
-        print("🔍 After upsample, before logits:", x.shape)
+        # print("🔍 After upsample, before logits:", x.shape)
 
         mask_preds = self.conv_logits(x)
 
-        print("🔍 After conv_logits:", mask_preds.shape)
+        # print("🔍 After conv_logits:", mask_preds.shape)
 
         return mask_preds
 
@@ -197,8 +197,8 @@ class FCNMaskHead(BaseModule):
 
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
 
-        print("mask_pred shape:", mask_preds.shape)
-        print("mask_target shape:", mask_targets.shape)
+        # print("mask_pred shape:", mask_preds.shape)
+        # print("mask_target shape:", mask_targets.shape)
 
         if mask_preds.shape[-1] != mask_targets.shape[-1] or mask_preds.shape[1] != mask_targets.shape[1]:
             # Upsample spatial dims first
