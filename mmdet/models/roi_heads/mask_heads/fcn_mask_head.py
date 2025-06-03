@@ -142,11 +142,20 @@ class FCNMaskHead(BaseModule):
         """
         for conv in self.convs:
             x = conv(x)
+
+        print("🔍 After convs, before upsample:", x.shape)
+
         if self.upsample is not None:
             x = self.upsample(x)
             if self.upsample_method == 'deconv':
                 x = self.relu(x)
+
+        print("🔍 After upsample, before logits:", x.shape)
+
         mask_preds = self.conv_logits(x)
+
+        print("🔍 After conv_logits:", mask_preds.shape)
+
         return mask_preds
 
     def get_targets(self, sampling_results: List[SamplingResult],
@@ -179,21 +188,8 @@ class FCNMaskHead(BaseModule):
                         sampling_results: List[SamplingResult],
                         batch_gt_instances: InstanceList,
                         rcnn_train_cfg: ConfigDict) -> dict:
-        """Calculate the loss based on the features extracted by the mask head.
+        """Calculate the loss based on the features extracted by the mask head."""
 
-        Args:
-            mask_preds (Tensor): Predicted foreground masks, has shape
-                (num_pos, num_classes, h, w).
-            sampling_results (List[obj:SamplingResult]): Assign results of
-                all images in a batch after sampling.
-            batch_gt_instances (list[:obj:`InstanceData`]): Batch of
-                gt_instance. It usually includes ``bboxes``, ``labels``, and
-                ``masks`` attributes.
-            rcnn_train_cfg (obj:ConfigDict): `train_cfg` of RCNN.
-
-        Returns:
-            dict: A dictionary of loss and targets components.
-        """
         mask_targets = self.get_targets(
             sampling_results=sampling_results,
             batch_gt_instances=batch_gt_instances,
@@ -201,18 +197,29 @@ class FCNMaskHead(BaseModule):
 
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
 
+        print("mask_pred shape:", mask_preds.shape)
+        print("mask_target shape:", mask_targets.shape)
+
+        # 🔼 Upsample targets to match prediction size
+        if mask_preds.shape[-1] != mask_targets.shape[-1]:
+            mask_targets = F.interpolate(
+                mask_targets.unsqueeze(1).float(),
+                size=mask_preds.shape[-2:],
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(1)
+
         loss = dict()
         if mask_preds.size(0) == 0:
             loss_mask = mask_preds.sum()
         else:
             if self.class_agnostic:
                 loss_mask = self.loss_mask(mask_preds, mask_targets,
-                                           torch.zeros_like(pos_labels))
+                                          torch.zeros_like(pos_labels))
             else:
                 loss_mask = self.loss_mask(mask_preds, mask_targets,
-                                           pos_labels)
+                                          pos_labels)
         loss['loss_mask'] = loss_mask
-        # TODO: which algorithm requires mask_targets?
         return dict(loss_mask=loss, mask_targets=mask_targets)
 
     def predict_by_feat(self,
