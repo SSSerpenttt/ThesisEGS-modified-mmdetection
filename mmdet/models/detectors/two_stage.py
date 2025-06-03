@@ -171,15 +171,17 @@ class TwoStageDetector(BaseDetector):
             for i, sample in enumerate(batch_data_samples):
                 gt_bboxes = sample.gt_instances.bboxes
                 if hasattr(sample.gt_instances, 'bboxes'):
+                    gt_bboxes = sample.gt_instances.bboxes
                     print(f"[GT BBoxes - Sample {i}] (xyxy):", gt_bboxes)
-            
-                    # Convert to xywh for debugging
-                    xyxy = gt_bboxes
+
+                    # extract raw tensor from HorizontalBoxes
+                    xyxy = gt_bboxes.tensor
                     xywh = torch.cat([
                         xyxy[:, :2],  # x, y
-                        xyxy[:, 2:] - xyxy[:, :2]  # w = x2 - x1, h = y2 - y1
+                        xyxy[:, 2:] - xyxy[:, :2]  # w, h
                     ], dim=-1)
                     print(f"[GT BBoxes - Sample {i}] (xywh):", xywh)
+
 
             
             # set cat_id of gt_labels to 0 in RPN
