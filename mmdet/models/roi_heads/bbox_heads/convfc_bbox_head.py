@@ -214,6 +214,7 @@ class ConvFCBBoxHead(BBoxHead):
 
         cls_score = self.fc_cls(x_cls) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
+        print("bbox_pred:", bbox_pred.shape, bbox_pred[0])
         return cls_score, bbox_pred
 
 
