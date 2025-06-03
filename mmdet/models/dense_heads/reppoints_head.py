@@ -441,9 +441,9 @@ class RepPointsHead(AnchorFreeHead):
             assigner = self.refine_assigner
             pos_weight = self.train_cfg['refine']['pos_weight']
 
-        print("==> Debug: gt_instances = ", gt_instances)
-        print("==> Debug: gt_instances.bboxes = ", getattr(gt_instances, 'bboxes', None))
-        print("==> Debug: gt_instances.labels = ", getattr(gt_instances, 'labels', None))
+        # print("==> Debug: gt_instances = ", gt_instances)
+        # print("==> Debug: gt_instances.bboxes = ", getattr(gt_instances, 'bboxes', None))
+        # print("==> Debug: gt_instances.labels = ", getattr(gt_instances, 'labels', None))
 
         assign_result = assigner.assign(pred_instances, gt_instances,
                                         gt_instances_ignore)
@@ -818,8 +818,8 @@ class RepPointsHead(AnchorFreeHead):
         img_shape = img_meta['img_shape']
         nms_pre = cfg.get('nms_pre', -1)
 
-        print(f"Input shapes: cls_score_list={len(cls_score_list)}, bbox_pred_list={len(bbox_pred_list)}, mlvl_priors={len(mlvl_priors)}")
-        print(f"Image shape: {img_shape}, nms_pre: {nms_pre}")
+        # print(f"Input shapes: cls_score_list={len(cls_score_list)}, bbox_pred_list={len(bbox_pred_list)}, mlvl_priors={len(mlvl_priors)}")
+        # print(f"Image shape: {img_shape}, nms_pre: {nms_pre}")
 
         mlvl_bboxes = []
         mlvl_scores = []
@@ -827,26 +827,26 @@ class RepPointsHead(AnchorFreeHead):
 
         for level_idx, (cls_score, bbox_pred, priors) in enumerate(
                 zip(cls_score_list, bbox_pred_list, mlvl_priors)):
-            print(f"\nLevel {level_idx} original cls_score shape: {cls_score.shape}, bbox_pred shape: {bbox_pred.shape}")
+            # print(f"\nLevel {level_idx} original cls_score shape: {cls_score.shape}, bbox_pred shape: {bbox_pred.shape}")
 
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
-            print(f"Level {level_idx} reshaped bbox_pred shape: {bbox_pred.shape}")
+            # print(f"Level {level_idx} reshaped bbox_pred shape: {bbox_pred.shape}")
 
             cls_score = cls_score.permute(1, 2, 0).reshape(-1, self.cls_out_channels)
-            print(f"Level {level_idx} reshaped cls_score shape: {cls_score.shape}")
+            # print(f"Level {level_idx} reshaped cls_score shape: {cls_score.shape}")
 
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
                 scores = cls_score.softmax(-1)[:, :-1]
-            print(f"Level {level_idx} scores sample: {scores[:5]}")
+            # print(f"Level {level_idx} scores sample: {scores[:5]}")
 
             results = filter_scores_and_topk(
                 scores, cfg.score_thr, nms_pre,
                 dict(bbox_pred=bbox_pred, priors=priors))
             scores, labels, _, filtered_results = results
-            print(f"Level {level_idx} after filtering: {scores.shape[0]} scores kept")
+            # print(f"Level {level_idx} after filtering: {scores.shape[0]} scores kept")
 
             bbox_pred = filtered_results['bbox_pred']
             priors = filtered_results['priors']
@@ -854,7 +854,7 @@ class RepPointsHead(AnchorFreeHead):
             bboxes = self._bbox_decode(priors, bbox_pred,
                                       self.point_strides[level_idx],
                                       img_shape)
-            print(f"Level {level_idx} decoded bboxes shape: {bboxes.shape}")
+            # print(f"Level {level_idx} decoded bboxes shape: {bboxes.shape}")
 
             mlvl_bboxes.append(bboxes)
             mlvl_scores.append(scores)
@@ -865,7 +865,7 @@ class RepPointsHead(AnchorFreeHead):
         results.scores = torch.cat(mlvl_scores)
         results.labels = torch.cat(mlvl_labels)
 
-        print(f"\nFinal results: bboxes={results.bboxes.shape}, scores={results.scores.shape}, labels={results.labels.shape}")
+        # print(f"\nFinal results: bboxes={results.bboxes.shape}, scores={results.scores.shape}, labels={results.labels.shape}")
 
         return self._bbox_post_process(
             results=results,
