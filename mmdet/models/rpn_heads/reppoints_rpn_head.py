@@ -997,6 +997,11 @@ class RepPointsRPNHead(AnchorFreeHead):
         y_min = y_min.clamp(min=0, max=max_shape[0])
         x_max = x_max.clamp(min=0, max=max_shape[1])
         y_max = y_max.clamp(min=0, max=max_shape[0])
+
+        if torch.any((x_max - x_min) > max_shape[1] * 0.9):
+            print("[!] Detected extremely wide box:", decoded_bboxes)
+        if torch.any((y_max - y_min) > max_shape[0] * 0.9):
+            print("[!] Detected extremely tall box:", decoded_bboxes)
     
         decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=1)
         return decoded_bboxes
