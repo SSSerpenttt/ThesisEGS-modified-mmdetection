@@ -462,6 +462,12 @@ class RepPointsHead(AnchorFreeHead):
 
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
+
+        print(f"[DEBUG] Stage: {stage}")
+        print(f"[DEBUG] Number of foreground (pos) samples: {len(pos_inds)}")
+        print(f"[DEBUG] Number of background (neg) samples: {len(neg_inds)}")
+        print(f"[DEBUG] FG ratio: {len(pos_inds) / (len(pos_inds) + len(neg_inds) + 1e-6):.4f}")
+                              
         if len(pos_inds) > 0:
             bbox_gt[pos_inds, :] = sampling_result.pos_gt_bboxes.tensor
             pos_proposals[pos_inds, :] = proposals[pos_inds, :]
