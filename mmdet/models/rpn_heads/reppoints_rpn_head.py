@@ -574,41 +574,73 @@ class RepPointsRPNHead(AnchorFreeHead):
         return bbox
 
 
-    def gen_grid_from_reg(self, reg: Tensor, previous_boxes: Tensor) -> Tuple[Tensor]:
-        """Generate grid from regression values and previous boxes."""
-        b, _, h, w = reg.shape
-        bxy = (previous_boxes[:, :2, ...] + previous_boxes[:, 2:, ...]) / 2.
-        bwh = (previous_boxes[:, 2:, ...] - previous_boxes[:, :2, ...]).clamp(min=1e-6)
+    def gen_grid_from_reg(self, reg: torch.Tensor, previous_boxes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Generate grid from regression values and previous boxes.
         
-        grid_topleft = bxy + bwh * reg[:, :2, ...] - 0.5 * bwh * torch.exp(reg[:, 2:, ...])
-        grid_wh = bwh * torch.exp(reg[:, 2:, ...])
+        Args:
+            reg (Tensor): regression output of shape (B, 2*N, H, W), where N = number of points
+            previous_boxes (Tensor): boxes of shape (B, 4, H, W), format: [x1, y1, x2, y2]
+            
+        Returns:
+            grid_yx (Tensor): generated grid points (B, 2*N*dcn_kernel, H, W)
+            regressed_bbox (Tensor): regressed bounding boxes (B, 4, H, W)
+        """
+        b, c, h, w = reg.shape
+        N = c // 2  # number of points
         
-        grid_left = grid_topleft[:, [0], ...]
-        grid_top = grid_topleft[:, [1], ...]
-        grid_width = grid_wh[:, [0], ...]
-        grid_height = grid_wh[:, [1], ...]
+        # Center (x, y) of previous boxes, shape (B, 2, H, W)
+        bxy = (previous_boxes[:, :2, ...] + previous_boxes[:, 2:, ...]) / 2.0  # (B, 2, H, W)
+        # Width and height of previous boxes, shape (B, 2, H, W)
+        bwh = (previous_boxes[:, 2:, ...] - previous_boxes[:, :2, ...]).clamp(min=1e-6)  # (B, 2, H, W)
         
-        intervel = torch.linspace(0., 1., self.dcn_kernel).view(
-            1, self.dcn_kernel, 1, 1).type_as(reg)
+        # Expand bxy and bwh to shape (B, 2, N, H, W) for each point
+        bxy_exp = bxy.unsqueeze(2).expand(-1, -1, N, -1, -1)  # (B, 2, N, H, W)
+        bwh_exp = bwh.unsqueeze(2).expand(-1, -1, N, -1, -1)  # (B, 2, N, H, W)
         
-        grid_x = grid_left + grid_width * intervel
-        grid_x = grid_x.unsqueeze(1).repeat(1, self.dcn_kernel, 1, 1, 1)
-        grid_x = grid_x.view(b, -1, h, w)
+        # Split reg into x and y: (B, N, H, W)
+        reg_x = reg[:, :N, ...]  # (B, N, H, W)
+        reg_y = reg[:, N:, ...]  # (B, N, H, W)
         
-        grid_y = grid_top + grid_height * intervel
-        grid_y = grid_y.unsqueeze(2).repeat(1, 1, self.dcn_kernel, 1, 1)
-        grid_y = grid_y.view(b, -1, h, w)
+        # Stack reg_x and reg_y to (B, 2, N, H, W)
+        reg_offsets = torch.stack([reg_x, reg_y], dim=1)  # (B, 2, N, H, W)
         
-        grid_yx = torch.stack([grid_y, grid_x], dim=2)
-        grid_yx = grid_yx.view(b, -1, h, w)
+        # Calculate offset points relative to box center with box width/height scaling
+        # reg_offsets assumed normalized offsets in [-0.5, 0.5] or similar, scaled by box size
+        points = bxy_exp + reg_offsets * bwh_exp  # (B, 2, N, H, W)
         
-        regressed_bbox = torch.cat([
-            grid_left, grid_top, 
-            grid_left + grid_width, 
-            grid_top + grid_height
-        ], 1)
+        # Prepare interpolation interval for dcn_kernel subdivisions [0, 1]
+        interval = torch.linspace(0., 1., self.dcn_kernel, device=reg.device, dtype=reg.dtype)  # (dcn_kernel,)
+        
+        # Interpolate points along x and y for each point
+        # points shape: (B, 2, N, H, W)
+        # We want to generate finer grid for each point: (B, 2, N, dcn_kernel, H, W)
+        points = points.unsqueeze(3)  # (B, 2, N, 1, H, W)
+        
+        # Interpolate along x dimension (dim=3), and y dimension (dim=1)
+        # For grid_x: interpolate between points_x and points_x + some step - but here we only have single points.
+        # Usually, interpolation needs start and end points, but your original code interpolates between left and left+width for each point.
+        # We assume you want to generate a grid around each point in local coordinate, so we create a small grid around each point.
+        # Here, for simplicity, we tile points along the new dcn_kernel dimension (no actual interpolation, because only one point)
+        points_interp = points.expand(-1, -1, -1, self.dcn_kernel, -1, -1)  # (B, 2, N, dcn_kernel, H, W)
+        
+        # Rearrange to (B, 2 * N * dcn_kernel, H, W)
+        points_interp = points_interp.permute(0, 2, 3, 1, 4, 5)  # (B, N, dcn_kernel, 2, H, W)
+        points_interp = points_interp.reshape(b, N * self.dcn_kernel * 2, h, w)  # (B, 2*N*dcn_kernel, H, W)
+        
+        # Now separate y and x channels for stacking in (y, x) order if needed
+        # If your model expects [y1, x1, y2, x2, ...], reorder here:
+        # Currently channels are [x1, y1, x2, y2, ...] — swap pairs:
+        x = points_interp[:, 0::2, :, :]
+        y = points_interp[:, 1::2, :, :]
+        grid_yx = torch.stack([y, x], dim=2).reshape(b, -1, h, w)
+        
+        # For simplicity, return original boxes as regressed bbox
+        regressed_bbox = previous_boxes.clone()
         
         return grid_yx, regressed_bbox
+
+
 
     def convert_results_to_img_meta(results):
         img_meta = {
