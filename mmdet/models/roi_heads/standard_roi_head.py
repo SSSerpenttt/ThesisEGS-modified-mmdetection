@@ -129,9 +129,6 @@ class StandardRoIHead(BaseRoIHead):
                 feats=[lvl_feat[i][None] for lvl_feat in x])
             sampling_results.append(sampling_result)
 
-        # for i, res in enumerate(sampling_results):
-        #     print(f"[ROI Loss] Image {i}: pos_gt_labels {res.pos_gt_labels[:5]}, pos_gt_bboxes {res.pos_gt_bboxes[:5]}")
-
         losses = dict()
         # bbox head loss
         if self.with_bbox:
@@ -363,8 +360,6 @@ class StandardRoIHead(BaseRoIHead):
             batch_img_metas=batch_img_metas,
             rcnn_test_cfg=rcnn_test_cfg,
             rescale=rescale)
-        # for i, res in enumerate(result_list):
-        #     print(f"[ROI Head] Image {i}: pred bboxes shape {res.bboxes.shape}, pred labels shape {res.labels.shape}")
         return result_list
 
     def predict_mask(self,
@@ -421,6 +416,4 @@ class StandardRoIHead(BaseRoIHead):
             batch_img_metas=batch_img_metas,
             rcnn_test_cfg=self.test_cfg,
             rescale=rescale)
-        # for i, res in enumerate(results_list):
-        #     print(f"[Mask Head] Image {i}: pred masks shape {getattr(res, 'masks', torch.empty(0)).shape}")
         return results_list
