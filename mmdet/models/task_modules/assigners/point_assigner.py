@@ -92,9 +92,9 @@ class PointAssigner(BaseAssigner):
             points_stride).int()  # [3...,4...,5...,6...,7...]
         lvl_min, lvl_max = points_lvl.min(), points_lvl.max()
 
-        print("==> gt_bboxes:", gt_bboxes)
-        print("==> gt_bboxes.shape:", gt_bboxes.shape if hasattr(gt_bboxes, 'shape') else "No shape")
-        print("==> gt_bboxes type:", type(gt_bboxes))
+        # print("==> gt_bboxes:", gt_bboxes)
+        # print("==> gt_bboxes.shape:", gt_bboxes.shape if hasattr(gt_bboxes, 'shape') else "No shape")
+        # print("==> gt_bboxes type:", type(gt_bboxes))
 
         # assign gt box
         gt_bboxes_xy = (gt_bboxes.tensor[:, :2] + gt_bboxes.tensor[:, 2:]) / 2
@@ -114,6 +114,8 @@ class PointAssigner(BaseAssigner):
             gt_lvl = gt_bboxes_lvl[idx]
             # get the index of points in this level
             lvl_idx = gt_lvl == points_lvl
+            if isinstance(lvl_idx, torch.Tensor):
+                lvl_idx = lvl_idx.to(points_range.device)
             points_index = points_range[lvl_idx]
             # get the points in this level
             lvl_points = points_xy[lvl_idx, :]
@@ -128,7 +130,7 @@ class PointAssigner(BaseAssigner):
             min_dist, min_dist_index = torch.topk(
                 points_gt_dist, self.pos_num, largest=False)
             # the index of nearest k points to gt center in this level
-            min_dist_points_index = points_index[min_dist_index]
+            min_dist_points_index = points_index[min_dist_index.to(points_index.device)]
             # The less_than_recorded_index stores the index
             #   of min_dist that is less then the assigned_gt_dist. Where
             #   assigned_gt_dist stores the dist from previous assigned gt
@@ -139,7 +141,7 @@ class PointAssigner(BaseAssigner):
             #   (1) it is k nearest to current gt center in this level.
             #   (2) it is closer to current gt center than other gt center.
             min_dist_points_index = min_dist_points_index[
-                less_than_recorded_index]
+                less_than_recorded_index.to(points_index.device)]
             # assign the result
             assigned_gt_inds[min_dist_points_index] = idx + 1
             assigned_gt_dist[min_dist_points_index] = min_dist[
