@@ -99,11 +99,11 @@ class TwoStageDetector(BaseDetector):
 
     def extract_feat(self, batch_inputs: Tensor) -> Tuple[Tensor]:
         # Debug check
-        print(f"extract_feat input type: {type(batch_inputs)}")
-        if isinstance(batch_inputs, torch.Tensor):
-            print(f"extract_feat input shape: {batch_inputs.shape}")
-        else:
-            raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
+        # print(f"extract_feat input type: {type(batch_inputs)}")
+        # if isinstance(batch_inputs, torch.Tensor):
+        #     print(f"extract_feat input shape: {batch_inputs.shape}")
+        # else:
+        #     raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
 
         x = self.backbone(batch_inputs)
         if self.with_neck:
@@ -113,11 +113,11 @@ class TwoStageDetector(BaseDetector):
     def _forward(self, batch_inputs: Tensor,
                 batch_data_samples: SampleList) -> tuple:
         # Debug check
-        print(f"_forward batch_inputs type: {type(batch_inputs)}")
-        if isinstance(batch_inputs, torch.Tensor):
-            print(f"_forward batch_inputs shape: {batch_inputs.shape}")
-        else:
-            raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
+        # print(f"_forward batch_inputs type: {type(batch_inputs)}")
+        # if isinstance(batch_inputs, torch.Tensor):
+        #     print(f"_forward batch_inputs shape: {batch_inputs.shape}")
+        # else:
+        #     raise TypeError(f"Expected Tensor for batch_inputs, but got {type(batch_inputs)}")
 
         results = ()
         x = self.extract_feat(batch_inputs)
