@@ -104,7 +104,13 @@ class BaseSampler(metaclass=ABCMeta):
                 gt_bboxes_ = gt_bboxes.convert_to(type(priors))
             else:
                 gt_bboxes_ = gt_bboxes
-            priors = cat_boxes([gt_bboxes_, priors], dim=0)
+
+            # print(f"gt_bboxes_ type: {type(gt_bboxes_)}")
+            # print(f"priors type: {type(priors)}")
+            # print(f"gt_bboxes_ element types: {[type(b) for b in gt_bboxes_] if hasattr(gt_bboxes_, '__iter__') else 'not iterable'}")
+            # print(f"priors element types: {[type(b) for b in priors] if hasattr(priors, '__iter__') else 'not iterable'}")
+
+            priors = cat_boxes([gt_bboxes_.tensor, priors], dim=0)
             assign_result.add_gt_(gt_labels)
             gt_ones = priors.new_ones(gt_bboxes_.shape[0], dtype=torch.uint8)
             gt_flags = torch.cat([gt_ones, gt_flags])
