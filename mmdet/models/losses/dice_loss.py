@@ -13,23 +13,34 @@ def dice_loss(pred,
               reduction='mean',
               naive_dice=False,
               avg_factor=None):
-    # Ensure pred and target have the same spatial shape
-    if pred.dim() == 4 and target.dim() == 3:
-        # Add channel dimension to target
-        target = target.unsqueeze(1)
-    elif pred.dim() == 3 and target.dim() == 4:
-        pred = pred.unsqueeze(1)
-    # Now both should be [N, 1, H, W] or [N, C, H, W]
-    if pred.shape[-2:] != target.shape[-2:]:
-        pred = torch.nn.functional.interpolate(
-            pred, size=target.shape[-2:], mode='bilinear', align_corners=False
-        )
-    # Ensure channel dims match
-    if pred.shape[1] != target.shape[1]:
-        if target.shape[1] == 1 and pred.shape[1] > 1:
-            target = target.expand(pred.shape[0], pred.shape[1], *target.shape[2:])
-        elif pred.shape[1] == 1 and target.shape[1] > 1:
-            pred = pred.expand(target.shape[0], target.shape[1], *pred.shape[2:])
+    """Calculate dice loss, there are two forms of dice loss is supported:
+
+        - the one proposed in `V-Net: Fully Convolutional Neural
+            Networks for Volumetric Medical Image Segmentation
+            <https://arxiv.org/abs/1606.04797>`_.
+        - the dice loss in which the power of the number in the
+            denominator is the first power instead of the second
+            power.
+
+    Args:
+        pred (torch.Tensor): The prediction, has a shape (n, *)
+        target (torch.Tensor): The learning label of the prediction,
+            shape (n, *), same shape of pred.
+        weight (torch.Tensor, optional): The weight of loss for each
+            prediction, has a shape (n,). Defaults to None.
+        eps (float): Avoid dividing by zero. Default: 1e-3.
+        reduction (str, optional): The method used to reduce the loss into
+            a scalar. Defaults to 'mean'.
+            Options are "none", "mean" and "sum".
+        naive_dice (bool, optional): If false, use the dice
+                loss defined in the V-Net paper, otherwise, use the
+                naive dice loss in which the power of the number in the
+                denominator is the first power instead of the second
+                power.Defaults to False.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+    """
+
     input = pred.flatten(1)
     target = target.flatten(1).float()
 
