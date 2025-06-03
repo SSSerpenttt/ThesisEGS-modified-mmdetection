@@ -167,20 +167,20 @@ class TwoStageDetector(BaseDetector):
                                               self.test_cfg.rpn)
             rpn_data_samples = copy.deepcopy(batch_data_samples)
 
-            # --- Debug GT bboxes ---
-            for i, sample in enumerate(batch_data_samples):
-                gt_bboxes = sample.gt_instances.bboxes
-                if hasattr(sample.gt_instances, 'bboxes'):
-                    gt_bboxes = sample.gt_instances.bboxes
-                    print(f"[GT BBoxes - Sample {i}] (xyxy):", gt_bboxes)
+            # # --- Debug GT bboxes ---
+            # for i, sample in enumerate(batch_data_samples):
+            #     gt_bboxes = sample.gt_instances.bboxes
+            #     if hasattr(sample.gt_instances, 'bboxes'):
+            #         gt_bboxes = sample.gt_instances.bboxes
+            #         print(f"[GT BBoxes - Sample {i}] (xyxy):", gt_bboxes)
 
-                    # extract raw tensor from HorizontalBoxes
-                    xyxy = gt_bboxes.tensor
-                    xywh = torch.cat([
-                        xyxy[:, :2],  # x, y
-                        xyxy[:, 2:] - xyxy[:, :2]  # w, h
-                    ], dim=-1)
-                    print(f"[GT BBoxes - Sample {i}] (xywh):", xywh)
+            #         # extract raw tensor from HorizontalBoxes
+            #         xyxy = gt_bboxes.tensor
+            #         xywh = torch.cat([
+            #             xyxy[:, :2],  # x, y
+            #             xyxy[:, 2:] - xyxy[:, :2]  # w, h
+            #         ], dim=-1)
+            #         print(f"[GT BBoxes - Sample {i}] (xywh):", xywh)
 
 
             
@@ -192,18 +192,18 @@ class TwoStageDetector(BaseDetector):
             rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
 
-            # --- Debug RPN Proposals ---
-            for i, rpn_result in enumerate(rpn_results_list):
-                proposals = rpn_result.bboxes  # (N, 4) in xyxy format
-                print(f"[RPN Proposals - Sample {i}] (xyxy):", proposals)
+            # # --- Debug RPN Proposals ---
+            # for i, rpn_result in enumerate(rpn_results_list):
+            #     proposals = rpn_result.bboxes  # (N, 4) in xyxy format
+            #     print(f"[RPN Proposals - Sample {i}] (xyxy):", proposals)
             
-                # Convert to xywh format
-                xyxy = proposals
-                xywh = torch.cat([
-                    xyxy[:, :2],  # x, y
-                    xyxy[:, 2:] - xyxy[:, :2]  # width, height
-                ], dim=-1)
-                print(f"[RPN Proposals - Sample {i}] (xywh):", xywh)
+            #     # Convert to xywh format
+            #     xyxy = proposals
+            #     xywh = torch.cat([
+            #         xyxy[:, :2],  # x, y
+            #         xyxy[:, 2:] - xyxy[:, :2]  # width, height
+            #     ], dim=-1)
+            #     print(f"[RPN Proposals - Sample {i}] (xywh):", xywh)
 
             
             # avoid get same name with roi_head loss
@@ -271,17 +271,17 @@ class TwoStageDetector(BaseDetector):
         results_list = self.roi_head.predict(
             x, rpn_results_list, batch_data_samples, rescale=rescale)
 
-        for i, result in enumerate(results_list):
-            pred_bboxes = result.bboxes
-            print(f"[Pred BBoxes - Sample {i}] (xyxy):", pred_bboxes)
+        # for i, result in enumerate(results_list):
+        #     pred_bboxes = result.bboxes
+        #     print(f"[Pred BBoxes - Sample {i}] (xyxy):", pred_bboxes)
         
-            # Convert to xywh
-            xyxy = pred_bboxes
-            xywh = torch.cat([
-                xyxy[:, :2],  # x, y
-                xyxy[:, 2:] - xyxy[:, :2]  # w = x2 - x1, h = y2 - y1
-            ], dim=-1)
-            print(f"[Pred BBoxes - Sample {i}] (xywh):", xywh)
+        #     # Convert to xywh
+        #     xyxy = pred_bboxes
+        #     xywh = torch.cat([
+        #         xyxy[:, :2],  # x, y
+        #         xyxy[:, 2:] - xyxy[:, :2]  # w = x2 - x1, h = y2 - y1
+        #     ], dim=-1)
+        #     print(f"[Pred BBoxes - Sample {i}] (xywh):", xywh)
 
         batch_data_samples = self.add_pred_to_datasample(
             batch_data_samples, results_list)
