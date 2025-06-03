@@ -200,14 +200,25 @@ class FCNMaskHead(BaseModule):
         print("mask_pred shape:", mask_preds.shape)
         print("mask_target shape:", mask_targets.shape)
 
-        # 🔼 Upsample targets to match prediction size
-        if mask_preds.shape[-1] != mask_targets.shape[-1]:
+        if mask_preds.shape[-1] != mask_targets.shape[-1] or mask_preds.shape[1] != mask_targets.shape[1]:
+            # Upsample spatial dims first
             mask_targets = F.interpolate(
                 mask_targets.unsqueeze(1).float(),
                 size=mask_preds.shape[-2:],
                 mode='bilinear',
                 align_corners=False
             ).squeeze(1)
+
+        # Now one-hot encode mask_targets to match mask_preds channels (num_classes)
+        # Assuming mask_targets values are class indices [0, num_classes-1]
+
+        num_classes = mask_preds.shape[1]
+        mask_targets = mask_targets.long()  # Ensure integer labels
+
+        # Convert (batch, H, W) -> (batch, num_classes, H, W)
+        mask_targets_onehot = torch.nn.functional.one_hot(mask_targets, num_classes=num_classes)  # (batch, H, W, num_classes)
+        mask_targets_onehot = mask_targets_onehot.permute(0, 3, 1, 2).float()  # (batch, num_classes, H, W)
+        mask_targets = mask_targets_onehot
 
         loss = dict()
         if mask_preds.size(0) == 0:
