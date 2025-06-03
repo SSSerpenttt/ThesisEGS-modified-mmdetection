@@ -74,7 +74,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         self.num_points = num_points
         self.point_feat_channels = point_feat_channels
         self.use_grid_points = True  # Always False for RPN
-        self.center_init = True  # Always True for RPN
+        self.center_init = False  # Always True for RPN
         self.point_strides = point_strides
         
         # Deformable convolution setup
