@@ -73,7 +73,7 @@ class RepPointsRPNHead(AnchorFreeHead):
         # RPN is binary classification (object vs background)
         self.num_points = num_points
         self.point_feat_channels = point_feat_channels
-        self.use_grid_points = False  # Always False for RPN
+        self.use_grid_points = True  # Always False for RPN
         self.center_init = True  # Always True for RPN
         self.point_strides = point_strides
         
