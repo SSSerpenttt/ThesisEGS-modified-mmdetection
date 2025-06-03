@@ -55,7 +55,7 @@ class RepPointsRPNHead(AnchorFreeHead):
                     type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=0.5),
                 loss_bbox_refine: ConfigType = dict(
                     type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0),
-                transform_method: str = 'moment',
+                transform_method: str = 'minmax',
                 moment_mul: float = 0.01,
                 topk: int = 1000,
                 num_classes: int = 1,
@@ -967,29 +967,40 @@ class RepPointsRPNHead(AnchorFreeHead):
 
 
     def _bbox_decode(self, points: Tensor, bbox_pred: Tensor, stride: int,
-                        max_shape: Tuple[int, int]) -> Tensor:
+                     max_shape: Tuple[int, int]) -> Tensor:
         """Decode point predictions to bounding boxes."""
         pred_distances = bbox_pred.view(-1, self.num_points, 4)
+        
+        # ✅ Clamp distances to avoid exploding predictions
+        max_dist = max(max_shape) / stride
+        pred_distances = torch.clamp(pred_distances, min=0, max=max_dist)
+    
         x_centers = points[:, 0].unsqueeze(1)
         y_centers = points[:, 1].unsqueeze(1)
-        left = pred_distances[:, :, 0] * stride
-        top = pred_distances[:, :, 1] * stride
-        right = pred_distances[:, :, 2] * stride
+    
+        left   = pred_distances[:, :, 0] * stride
+        top    = pred_distances[:, :, 1] * stride
+        right  = pred_distances[:, :, 2] * stride
         bottom = pred_distances[:, :, 3] * stride
+    
         x1 = x_centers - left
         y1 = y_centers - top
         x2 = x_centers + right
         y2 = y_centers + bottom
+    
         x_min, _ = x1.min(dim=1)
         y_min, _ = y1.min(dim=1)
         x_max, _ = x2.max(dim=1)
         y_max, _ = y2.max(dim=1)
+    
         x_min = x_min.clamp(min=0, max=max_shape[1])
         y_min = y_min.clamp(min=0, max=max_shape[0])
         x_max = x_max.clamp(min=0, max=max_shape[1])
         y_max = y_max.clamp(min=0, max=max_shape[0])
-        decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=1)  # <--- fix dim=1
+    
+        decoded_bboxes = torch.stack([x_min, y_min, x_max, y_max], dim=1)
         return decoded_bboxes
+
 
     def get_proposals(self, cls_scores: List[Tensor], pts_preds_refine: List[Tensor],
                         batch_img_metas: List[dict]) -> InstanceList:
