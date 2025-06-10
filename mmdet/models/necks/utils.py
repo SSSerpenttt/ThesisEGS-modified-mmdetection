@@ -47,7 +47,7 @@ class Conv2dSamePadding(nn.Conv2d):
         bottom = extra_h - top
         x = F.pad(x, [left, right, top, bottom])
         
-        print("Conv2dSamePadding forward")
+        # print("Conv2dSamePadding forward")
         return F.conv2d(x, self.weight, self.bias, self.stride, self.padding,
                         self.dilation, self.groups)
 
@@ -84,7 +84,7 @@ class MaxPool2dSamePadding(nn.Module):
         x = F.pad(x, [left, right, top, bottom])
         x = self.pool(x)
 
-        print("MaxPool2dSamePadding forward")
+        # print("MaxPool2dSamePadding forward")
         return x
 
 
@@ -125,7 +125,7 @@ class DepthWiseConvBlock(nn.Module):
         if self.apply_activation:
             x = self.swish(x)
 
-        print("DepthWiseConvBlock forward")
+        # print("DepthWiseConvBlock forward")
         return x
 
 
@@ -155,5 +155,5 @@ class DownChannelBlock(nn.Module):
         if self.apply_activation:
             x = self.swish(x)
 
-        print("DownChannelBlock forward")
+        # print("DownChannelBlock forward")
         return x
