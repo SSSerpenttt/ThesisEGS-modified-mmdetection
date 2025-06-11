@@ -216,9 +216,10 @@ class FCNMaskHead(BaseModule):
         mask_targets = mask_targets.long()  # Ensure integer labels
 
         # Convert (batch, H, W) -> (batch, num_classes, H, W)
-        mask_targets_onehot = torch.nn.functional.one_hot(mask_targets, num_classes=num_classes)  # (batch, H, W, num_classes)
-        mask_targets_onehot = mask_targets_onehot.permute(0, 3, 1, 2).float()  # (batch, num_classes, H, W)
-        mask_targets = mask_targets_onehot
+        if isinstance(self.loss_mask, (torch.nn.BCEWithLogitsLoss, DiceLoss)):
+            num_classes = mask_preds.shape[1]
+            mask_targets_onehot = torch.nn.functional.one_hot(mask_targets, num_classes=num_classes)  # (N, H, W, C)
+            mask_targets = mask_targets_onehot.permute(0, 3, 1, 2).float()  # (N, C, H, W)
 
         loss = dict()
         if mask_preds.size(0) == 0:
