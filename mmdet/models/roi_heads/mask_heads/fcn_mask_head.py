@@ -18,6 +18,7 @@ from mmdet.models.utils import empty_instances
 from mmdet.registry import MODELS
 from mmdet.structures.mask import mask_target
 from mmdet.utils import ConfigType, InstanceList, OptConfigType, OptMultiConfig
+from mmdet.models.losses import DiceLoss
 
 BYTES_PER_FLOAT = 4
 # TODO: This memory limit may be too much or too little. It would be better to
